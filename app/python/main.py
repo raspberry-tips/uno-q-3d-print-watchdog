@@ -1,21 +1,15 @@
-# main.py — Spaghetti-Waechter: FOMO-AD-Anomalieerkennung am 3D-Drucker
-# raspberry.tips — Skeleton v0.1 (21.08.2026), Hardware-Test steht aus.
+# main.py - Spaghetti Watchdog: FOMO-AD anomaly detection on a 3D printer
+# raspberry.tips
 #
-# Ablauf je Zyklus (CHECK_INTERVAL_S):
-#   1. Nur aktiv, wenn Moonraker "printing" meldet (ONLY_WHILE_PRINTING)
-#   2. Frame holen → VisualAnomalyDetection.detect()
-#   3. Zeitfilter: ALARM erst bei ALARM_HITS von ALARM_WINDOW Treffern
-#      (ein einzelner Fehlalarm, der einen 9-h-Druck pausiert, ist schlimmer
-#       als gar kein System — konzept.md, Regel 1)
-#   4. Alarm → HA (MQTT), LED-Matrix (Bridge → MCU), optional Moonraker-Pause
-#   5. Alarm bleibt gelatcht, bis der Druck nicht mehr "printing" ist
-#
-# ⚠️ VERIFY-Punkte (Hardware-Test):
-#   VERIFY-2: Einzelframe aus arduino.app_peripherals.camera.Camera —
-#             Methodenname (capture()/read()/get_frame()) gegen App-Lab-
-#             Beispiel "Detect Objects on Camera" pruefen. Fallback: GStreamer.
-#   VERIFY-3: detect()-Ergebnis: anomaly_max_score-Schluessel (Blaupause) —
-#             gegen eigenes Modell pruefen.
+# One cycle, every CHECK_INTERVAL_S seconds:
+#   1. Only act while Moonraker reports "printing" (ONLY_WHILE_PRINTING)
+#   2. Grab a frame -> VisualAnomalyDetection.detect()
+#   3. Time filter: alarm only after ALARM_HITS out of ALARM_WINDOW checks.
+#      A single false positive that pauses a nine-hour print is worse than
+#      no system at all.
+#   4. On alarm: Home Assistant (MQTT), LED matrix (Bridge -> MCU) and,
+#      if enabled, a Moonraker pause
+#   5. The alarm stays latched until the printer is no longer "printing"
 
 import base64
 import io
@@ -38,14 +32,14 @@ from moonraker import Moonraker
 
 log = Logger("SpaghettiWaechter")
 
-# ── Status-Webseite (WebUI-Brick, Port 7000) ──────────────────
-# Ganz bewusst simpel: die Seite pollt alle 5 s GET /state — kein WebSocket.
+# -- Status web page (web_ui brick, port 7000) ----------------
+# Deliberately simple: the page polls GET /state every 5 s, no WebSocket.
 STATE = {"status": "starting", "score": 0.0, "printer": "", "alarm": False,
          "frame_b64": "", "alarm_b64": "", "threshold": config.SCORE_THRESHOLD}
 WEBLOG = deque(maxlen=60)
 
 def note(msg, warn=False):
-    """Loggt in App-Lab-Konsole UND ins Web-Log der Statusseite."""
+    """Log to the App Lab console AND to the web log on the status page."""
     (log.warning if warn else log.info)(msg)
     WEBLOG.append(f"{datetime.now():%H:%M:%S}  {msg}")
 
@@ -57,13 +51,14 @@ def _b64(img):
 web = WebUI()
 web.expose_api("GET", "/state", lambda: dict(STATE, log=list(WEBLOG)))
 
-# ── Einstellungen via Webinterface ────────────────────────────
-# Alle Regler + Verbindungen (Philipps Wunsch 28.08.; ⚠️ Seite hat kein Login,
-# Absicherung spaeter). data/settings.json ueberlagert die config.py-Defaults.
-# Tuning gilt sofort; MQTT-Aenderungen erst nach App-Neustart (Verbindung
-# wird beim Start aufgebaut), Moonraker-Host gilt sofort.
+# -- Settings through the web interface -----------------------
+# Every tunable and every connection setting is editable in the browser.
+# Note that the page has no login - keep it on your own LAN.
+# data/settings.json overrides the defaults from config.py. Tuning applies
+# immediately; MQTT changes need an app restart (the connection is opened at
+# startup), the Moonraker host applies immediately.
 SETTINGS_FILE = "/app/data/settings.json"
-TUNABLES = {  # name → (typ, min, max)
+TUNABLES = {  # name -> (type, min, max)
     "SCORE_THRESHOLD": (float, 1, 100),
     "CHECK_INTERVAL_S": (int, 5, 300),
     "ALARM_WINDOW": (int, 1, 20),
@@ -115,7 +110,7 @@ def _apply_settings(values, save=False):
             note("MQTT change - takes effect after the next app restart.", warn=True)
     return current
 
-try:  # gespeicherte Einstellungen beim Start ueber die Defaults legen
+try:  # lay the saved settings over the defaults at startup
     with open(SETTINGS_FILE) as f:
         _apply_settings(json.load(f))
 except (OSError, ValueError):
@@ -127,21 +122,22 @@ def _post_config(data: dict):
 web.expose_api("GET", "/config", lambda: {k: getattr(config, k) for k in TUNABLES})
 web.expose_api("POST", "/config", _post_config)
 
-# ── Bausteine (nach dem Settings-Load: config ist jetzt final) ─
+# -- Building blocks (settings are loaded, config is final now) -
 anomaly = VisualAnomalyDetection()
 printer = Moonraker(config.MOONRAKER_HOST)
 ha = HaMqtt(config.MQTT_HOST, config.MQTT_PORT, config.MQTT_USER,
             config.MQTT_PASSWORD, config.DISCOVERY_PREFIX,
             config.DEVICE_ID, config.DEVICE_NAME, log)
 
-hits = deque(maxlen=config.ALARM_WINDOW)   # True = Zyklus war anomal
+hits = deque(maxlen=config.ALARM_WINDOW)   # True = this cycle was anomalous
 alarm_latched = False
 
-# ── Frame-Quelle ──────────────────────────────────────────────
-# Lehre vom 28.08.: Das Camera-Peripheral rendert mit anderem Weissabgleich
-# (Blau-Kanal ~2x) als die Trainings-Pipeline → jedes Bild scort >40.
-# Inferenz MUSS durch dieselbe Pipeline wie das Training (liveview.py):
-# kontinuierlicher Strom, konvergierter Weissabgleich, videoflip rotate-180.
+# -- Frame source ---------------------------------------------
+# Hard-won lesson: the camera peripheral renders with a different white
+# balance than the training pipeline (blue channel roughly doubled), which
+# made every single frame score high. Inference MUST run through the very
+# same pipeline as the training data (liveview.py): a continuous stream, a
+# converged white balance, videoflip rotate-180.
 LIVE_JPG = "/tmp/spaghetti_live.jpg"
 GST_PIPELINE = ["gst-launch-1.0", "-q", "libcamerasrc", "!",
                 "video/x-raw,width=632,height=480", "!", "videoconvert", "!",
@@ -156,7 +152,7 @@ def _frame_fresh(max_age=6.0):
         return False
 
 def _ensure_pipeline():
-    """Startet die Kamera-Pipeline (neu), wenn sie fehlt oder haengt."""
+    """(Re)start the camera pipeline if it is missing or has stalled."""
     global _gst_proc
     if _gst_proc is not None and _gst_proc.poll() is None and _frame_fresh():
         return True
@@ -170,15 +166,15 @@ def _ensure_pipeline():
         pass
     _gst_proc = subprocess.Popen(GST_PIPELINE,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(3.0)                        # Weissabgleich konvergieren lassen
+    time.sleep(3.0)                        # let the white balance converge
     return _frame_fresh()
 
 def grab_frame():
-    """Aktuelles Bild als PIL.Image — identische Pipeline wie beim Training."""
+    """Current frame as a PIL.Image - same pipeline as during training."""
     if not _ensure_pipeline():
         return None
-    for _ in range(2):                     # multifilesink schreibt live: bei
-        try:                               # angeschnittenem JPEG kurz warten
+    for _ in range(2):                     # multifilesink writes live: wait a
+        try:                               # moment on a half-written JPEG
             with open(LIVE_JPG, "rb") as f:
                 img = Image.open(io.BytesIO(f.read()))
             img.load()
@@ -189,11 +185,11 @@ def grab_frame():
             time.sleep(0.3)
     return None
 
-# ── Rotierender Trainings-Puffer ──────────────────────────────
+# -- Rotating training buffer ---------------------------------
 def collect_training_frame(img):
-    """Sichert das Bild in den rotierenden Puffer (nur unauffaellige Frames —
-    die Kuratierung uebernimmt der Score-Check im Aufrufer). Bei Bedarf fuers
-    Re-Training den Ordner abziehen und wie in Teil 3 zu Edge Impulse laden."""
+    """Keep the frame in the rotating buffer (only unremarkable frames, i.e.
+    below the threshold). Pull the folder when you want to re-train and upload
+    it to Edge Impulse."""
     try:
         os.makedirs(config.TRAINING_FRAME_DIR, exist_ok=True)
         img.save(os.path.join(config.TRAINING_FRAME_DIR,
@@ -204,10 +200,10 @@ def collect_training_frame(img):
     except OSError as e:
         log.warning(f"Training buffer: {e}")
 
-# ── Aktionen ──────────────────────────────────────────────────
+# -- Actions --------------------------------------------------
 def annotate(frame, detection):
-    """Anomalie-Regionen einzeichnen — der Nutzer sieht, WAS das Modell stoert.
-    draw_anomaly_markers kommt aus App Lab (Beispiel 01_visual_anomaly_example)."""
+    """Draw the anomaly regions so the user can see WHAT the model reacted to.
+    draw_anomaly_markers comes from the App Lab example 01_visual_anomaly."""
     try:
         from arduino.app_utils.image import draw_anomaly_markers
         marked = draw_anomaly_markers(image=frame, detection=detection)
@@ -226,14 +222,14 @@ def set_alarm(on: bool, score: float = 0.0, frame=None, detection=None):
         STATE["alarm"] = True
         ha.publish_alarm(True)
         try:
-            Bridge.call("set_alarm", True)     # LED-Matrix auf dem M33
+            Bridge.call("set_alarm", True)     # LED matrix on the STM32
         except Exception as e:
             log.warning(f"Bridge: {e}")
         if frame is not None:
             marked = annotate(frame, detection) if detection else frame
             buf = io.BytesIO()
             marked.convert("RGB").save(buf, "JPEG", quality=85)
-            ha.publish_alarm_image(buf.getvalue())   # Beweisfoto ins HA-Dashboard
+            ha.publish_alarm_image(buf.getvalue())   # evidence photo into HA
             STATE["alarm_b64"] = base64.b64encode(buf.getvalue()).decode()
             if config.SAVE_ALARM_FRAMES:
                 os.makedirs(config.ALARM_FRAME_DIR, exist_ok=True)
@@ -254,7 +250,7 @@ def set_alarm(on: bool, score: float = 0.0, frame=None, detection=None):
         except Exception:
             pass
 
-# ── Hauptzyklus ───────────────────────────────────────────────
+# -- Main cycle -----------------------------------------------
 def set_status(status):
     if STATE["status"] != status:
         note(f"Status: {STATE['status']} -> {status}")
@@ -268,8 +264,8 @@ def loop():
     STATE["printer"] = printer_state
     printing = printer_state == "printing"
 
-    # Kamerabild in JEDEM Zyklus fuer die Statusseite (Ausrichten, Kontrolle) —
-    # bewertet wird es nur weiter unten, wenn wirklich gedruckt wird.
+    # Refresh the camera image on EVERY cycle for the status page (aiming,
+    # spot checks) - it is only scored further down, while actually printing.
     frame = grab_frame()
     if frame is not None:
         STATE["frame_b64"] = _b64(frame)
@@ -277,13 +273,13 @@ def loop():
     if config.ONLY_WHILE_PRINTING and not printing:
         set_status("idle")
         hits.clear()
-        set_alarm(False)                       # Druckende loest den Latch
+        set_alarm(False)                       # end of print releases the latch
         return
     if (config.PRINT_WARMUP_S > 0 and printing
             and printer.print_duration() < config.PRINT_WARMUP_S):
-        # Startphase (Homing, Purge, Bett vorn): Szene war nicht im Training
-        # → Fehlalarm-Fenster (Befund 28.08.). Score trotzdem zeigen —
-        # nur fuer den Alarm zaehlt er nicht.
+        # Start-up phase (homing, purge, bed at the front): that view was not
+        # in the training data, so it is a systematic false-alarm window. The
+        # score is still shown - it just does not count towards an alarm.
         set_status("warmup")
         hits.clear()
         if frame is not None:
@@ -295,14 +291,14 @@ def loop():
         return
     set_status("watching")
     if alarm_latched:
-        return                                 # gelatcht: nichts mehr tun
+        return                                 # latched: nothing left to do
 
     if frame is None:
         note("No camera frame received.", warn=True)
         return
 
     result = anomaly.detect(frame)
-    score = float(result.get("anomaly_max_score", 0.0)) if result else 0.0  # VERIFY-3
+    score = float(result.get("anomaly_max_score", 0.0)) if result else 0.0
     STATE["score"] = score
     ha.publish_score(score)
 
@@ -311,7 +307,7 @@ def loop():
     note(f"Score {score:.1f} | regions {regions} | window {list(hits)}")
 
     if config.COLLECT_TRAINING_FRAMES and score < config.SCORE_THRESHOLD:
-        collect_training_frame(frame)      # nur unauffaellige Frames sammeln
+        collect_training_frame(frame)      # only unremarkable frames
 
     if len(hits) == config.ALARM_WINDOW and sum(hits) >= config.ALARM_HITS:
         set_alarm(True, score, frame, result)
