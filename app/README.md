@@ -17,6 +17,7 @@
 > | `python/config.py` | defaults — everything is also editable in the browser |
 > | `python/ha_mqtt.py` | MQTT discovery, four entities plus last will |
 > | `python/moonraker.py` | print state, duration and pause over plain urllib |
+> | `python/training_data.py` | the training buffer: gallery, Edge Impulse upload, purge |
 > | `assets/index.html` | status page on port 7000: live frame, last alarm with markers, log, all settings |
 > | `sketch/sketch.ino` | LED-matrix alarm and heartbeat, `Bridge.provide("set_alarm")` |
 >
@@ -28,6 +29,16 @@
 > nothing ever alarms while you collect. Without *some* registered model App Lab
 > refuses to start the app at all — `Model … Not Found`, before the container even
 > comes up. Swap in your own `.eim` once you have trained it.
+>
+> **The training buffer is part of the app.** Every inconspicuous frame is
+> kept in `data/training/`, and **🖼️ Training frames** on the status page runs
+> the whole re-training loop without SSH: browse the frames as thumbnails
+> (full size on click), upload them to Edge Impulse in batches, and purge the
+> buffer once the Studio confirms them. Your Edge Impulse API key goes into
+> the browser (*Settings → Edge Impulse upload*), not into the code; it is
+> stored in `data/settings.json` and never sent back to the page. Uploads run
+> in the background, so the watchdog keeps watching, and only frames that the
+> API really accepted are ever deleted.
 >
 > **Safety defaults:** auto-pause is off; pausing parks the head and is not an
 > emergency stop. The status page has **no login** — keep it on your own LAN.
@@ -52,8 +63,9 @@ spaghetti-waechter/
 │   ├── main.py         Zyklus: printing? → Frame → detect → 3-von-4-Filter → Aktionen
 │   ├── config.py       Defaults — alles auch im Webinterface einstellbar (Port 7000)
 │   ├── ha_mqtt.py      MQTT Discovery (Alarm, Score, Status, Alarm-Bild-Kamera, LWT)
-│   └── moonraker.py    print_state / print_duration / pause (urllib, kein Zusatzpaket)
-├── assets/index.html   Status-Webseite: Livebild, Alarm-Bild, Log, alle Einstellungen
+│   ├── moonraker.py    print_state / print_duration / pause (urllib, kein Zusatzpaket)
+│   └── training_data.py  Trainings-Puffer: Galerie, Edge-Impulse-Upload, Purge
+├── assets/index.html   Status-Webseite: Livebild, Alarm-Bild, Log, Einstellungen, Galerie
 └── sketch/sketch.ino   LED-Matrix: Blink-Alarm + Herzschlag; Bridge.provide("set_alarm")
 ```
 
@@ -82,6 +94,31 @@ Risse in Beton, nicht euer Druckbett. Es dient nur dazu, dass die App startet un
 sammeln kann. Für die echte Erkennung braucht ihr euer eigenes Modell, weil
 FOMO-AD immer die konkrete Szene lernt.
 
+## Trainings-Puffer im Webinterface
+
+Der Wächter legt jeden unauffälligen Frame in `data/training/` ab (rotierend,
+Größe einstellbar). Unter **🖼️ Training frames** auf der Statusseite läuft der
+komplette Re-Training-Ablauf ohne SSH:
+
+1. **Ansehen** — Galerie mit Thumbnails, neueste zuerst, blätterbar; Klick
+   öffnet den Frame in Originalgröße. So fällt vor dem Upload auf, wenn sich
+   Kamera, Licht oder Motiv verändert haben.
+2. **Hochladen** — „Upload to Edge Impulse" schickt den Puffer in Batches an
+   die Ingestion-API (Label `no anomaly`, Duplikate weist Edge Impulse selbst
+   ab). Der Upload läuft im Hintergrund, die Überwachung läuft weiter. Der
+   **API-Key wird im Webinterface eingetragen** (Settings → Edge Impulse
+   upload) und landet in `data/settings.json` — nie im Code. Optional die
+   Projekt-ID: dann meldet die App nach dem Upload, wie viele Trainings-
+   Samples im Studio liegen.
+3. **Leeren** — „Purge buffer" (zwei Klicks) löscht den Puffer, sinnvoll erst
+   nachdem der Studio-Zähler den Upload bestätigt hat. Wer den Zwischenschritt
+   sparen will, hakt „delete after upload" an: dann fliegt jeder Frame raus,
+   den Edge Impulse angenommen hat.
+
+Verlustfrei: Hoch- und weggeladen wird nur, was beim Start des Uploads im
+Puffer lag — Frames, die währenddessen entstehen, bleiben liegen. Und gelöscht
+wird ein Batch nur, wenn er vollständig angekommen ist.
+
 ## Inbetriebnahme (Kurzfassung)
 
 1. Kamera-Dienste aus Teil 2 stilllegen: `sudo systemctl disable --now liveview capture`
@@ -96,11 +133,14 @@ FOMO-AD immer die konkrete Szene lernt.
    (Format: siehe Teil 4 der Serie); Check: `arduino-app-cli model list`
 6. In der `app.yaml` den Platzhalter durch euren Modellnamen ersetzen und
    die Schwelle aus den eigenen Score-Verteilungen bestimmen (Teil 5)
-5. Einstellungen im Browser: `http://<board-ip>:7000` → ⚙️ Settings
-   (Schwelle, Moonraker-IP, MQTT-Zugang — MQTT gilt nach App-Neustart)
+7. Einstellungen im Browser: `http://<board-ip>:7000` → ⚙️ Settings
+   (Schwelle, Moonraker-IP, MQTT-Zugang, Edge-Impulse-Key — MQTT gilt nach
+   App-Neustart, alles andere sofort)
 
 ⚠️ Die Status-Webseite hat keinen Login — nur im vertrauenswürdigen LAN betreiben
 und einen eigenen, rein lokalen MQTT-Benutzer nur für den Wächter verwenden.
+MQTT-Passwort und Edge-Impulse-Key gibt die Seite nicht wieder heraus (leeres
+Feld = unverändert), sie liegen aber im Klartext in `data/settings.json`.
 
 ## Wichtigste Lektion aus dem Praxisbetrieb
 
