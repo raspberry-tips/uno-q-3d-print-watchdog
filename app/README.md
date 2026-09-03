@@ -1,5 +1,39 @@
 # Spaghetti-Wächter — KI-Druckwächter für den Arduino UNO Q
 
+> ## English summary
+>
+> The App Lab application. Every 15 seconds — and only while Moonraker reports
+> `printing` — it grabs a camera frame, scores it with the FOMO-AD anomaly model,
+> and raises the alarm after **three anomalous cycles out of four**, so a single
+> outlier never triggers it. On alarm it latches, publishes to Home Assistant over
+> MQTT (alarm, score, state and a camera entity carrying the evidence photo, all
+> through discovery), blinks the LED matrix via the STM32 — and, only if you opted
+> in, asks Moonraker to pause the print. The latch clears when the print ends.
+>
+> | Path | What it is |
+> |---|---|
+> | `app.yaml` | bricks: `visual_anomaly_detection` + `web_ui` |
+> | `python/main.py` | the cycle described above |
+> | `python/config.py` | defaults — everything is also editable in the browser |
+> | `python/ha_mqtt.py` | MQTT discovery, four entities plus last will |
+> | `python/moonraker.py` | print state, duration and pause over plain urllib |
+> | `assets/index.html` | status page on port 7000: live frame, last alarm with markers, log, all settings |
+> | `sketch/sketch.ino` | LED-matrix alarm and heartbeat, `Bridge.provide("set_alarm")` |
+>
+> **Install:** download `spaghetti-waechter.zip`, then *Import App* in App Lab (or
+> `arduino-app-cli app import spaghetti-waechter.zip`).
+>
+> **It starts without your own model.** `app.yaml` names the built-in
+> `concrete-crack-anomaly-detection` as a placeholder and the threshold is 100, so
+> nothing ever alarms while you collect. Without *some* registered model App Lab
+> refuses to start the app at all — `Model … Not Found`, before the container even
+> comes up. Swap in your own `.eim` once you have trained it.
+>
+> **Safety defaults:** auto-pause is off; pausing parks the head and is not an
+> emergency stop. The status page has **no login** — keep it on your own LAN.
+>
+> Details below are in German.
+
 App-Lab-App, die 3D-Druck-Fehler ("Spaghetti") per FOMO-AD-Anomalieerkennung
 auf dem Arduino UNO Q erkennt — mit Status-Webseite, Home-Assistant-Anbindung
 (MQTT Discovery inkl. Beweisfoto-Kamera), LED-Matrix-Alarm und optionaler
