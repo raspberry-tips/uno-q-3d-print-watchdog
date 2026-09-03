@@ -12,7 +12,7 @@ one; it flags spaghetti because it has never seen anything like it.
 Written up in a five-part series (German) on
 [raspberry.tips](https://raspberry.tips/arduino/arduino-uno-q-druckwaechter-teil-5).
 
-![The three printed parts](cad/renderings/alle-teile.png)
+![System overview](docs/system-overview.png)
 
 ## What is in here
 
@@ -24,6 +24,12 @@ Written up in a five-part series (German) on
 | [`autostart/`](autostart/) | systemd unit so the watchdog comes back after a reboot |
 
 ## Hardware
+
+![Wiring](docs/wiring.png)
+
+Three physical connections — the camera ribbon, the board-to-carrier stack and USB-C
+power. Everything else goes over the network.
+
 
 - **Arduino UNO Q** (Qualcomm QRB2210 running Debian + STM32U585 MCU)
 - **Arduino UNO Media Carrier (ASX00083)** — required, it carries the CSI port
