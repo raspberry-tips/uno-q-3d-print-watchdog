@@ -1,5 +1,33 @@
 # Wächter beim Booten automatisch starten
 
+> ## English summary
+>
+> App Lab does not bring an app back after a reboot, and `arduino-app-cli` has no
+> `enable` subcommand. These two files add it.
+>
+> | File | Goes to |
+> |---|---|
+> | `waechter_autostart.sh` | `/home/arduino/waechter_autostart.sh` (chmod 755) |
+> | `spaghetti-waechter-autostart.service` | `/etc/systemd/system/` |
+>
+> ```sh
+> install -m 755 waechter_autostart.sh /home/arduino/waechter_autostart.sh
+> sudo install -m 644 spaghetti-waechter-autostart.service /etc/systemd/system/
+> sudo systemctl daemon-reload
+> sudo systemctl enable spaghetti-waechter-autostart.service
+> ```
+>
+> **Why a wait script and not a plain `ExecStart=arduino-app-cli app start`:** the
+> App Lab daemon needs a moment after boot before it accepts commands, and a start
+> issued too early fails **without any error message**. The script polls up to 30
+> times, starts the app as soon as the daemon answers, and then verifies that it is
+> actually running. Starting an already-running app is harmless.
+>
+> ⚠️ `liveview` and `capture` must stay disabled, or the collector takes the camera
+> before the app can: `sudo systemctl disable --now liveview capture`
+>
+> Details below are in German.
+
 App Lab startet eine App nach einem Neustart **nicht** von selbst — der
 `arduino-app-cli` kennt kein `enable`. Diese zwei Dateien holen das nach.
 
