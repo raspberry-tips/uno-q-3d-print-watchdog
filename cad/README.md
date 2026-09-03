@@ -39,6 +39,11 @@
 > the document from scratch, `export_stl.py` writes `stl/`, `render_stl.py`
 > makes the images in `renderings/`. Both FreeCAD scripts run headless.
 >
+> **First generation:** `stl-v1/` holds the superseded clamp
+> (`klammer_gehaeuse_uno.stl`, `adapter45.stl`) that part 1 of the series
+> describes. It clamped to the printer's housing and moved too easily —
+> kept here so the article's downloads stay available.
+>
 > **Licence:** CC BY 4.0 — raspberry.tips. Detailed build notes below are in
 > German.
 
