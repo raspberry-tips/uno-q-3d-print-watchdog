@@ -50,3 +50,19 @@ COLLECT_TRAINING_FRAMES = True  # Rotating training buffer: every frame that
 TRAINING_FRAME_DIR = "/app/data/training"   # scores BELOW the threshold is
 TRAINING_FRAME_MAX = 2500       # kept, oldest ones drop out. Pull the folder
                                 # when you want to re-train.
+
+# -- Edge Impulse (uploading the training buffer) -------------
+# Browsing, uploading and purging the buffer all happen in the web
+# interface (port 7000 -> "Training frames"). The API key does NOT belong
+# here: type it into the browser, it is stored in data/settings.json
+# (chmod 600).
+EI_API_KEY = ""                 # <-- Studio -> Dashboard -> Keys. Note that
+                                # the default key may upload and deploy but
+                                # cannot start a training run - that needs
+                                # an admin key.
+EI_LABEL = "no anomaly"         # label the upload gets (FOMO-AD convention)
+EI_UPLOAD_BATCH = 20            # frames per HTTP request
+EI_DELETE_AFTER_UPLOAD = False  # safe default: count the samples in the
+                                # Studio first, then hit "Purge buffer".
+EI_PROJECT_ID = ""              # optional, only for the cross-check after
+                                # an upload (Studio sample count).
