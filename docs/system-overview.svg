@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 830" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1a202c"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0066cc"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#cc0000"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f855a"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="830" fill="#ffffff"/>
+
+  <!-- Titel -->
+  <text x="600" y="42" text-anchor="middle" font-size="26" font-weight="700" fill="#1a202c">Spaghetti Watchdog — System overview v2</text>
+  <text x="600" y="68" text-anchor="middle" font-size="15" fill="#4a5568">Camera, board, printer and smart home — what talks to what, and over which protocol</text>
+
+  <!-- ══ Drucker ══ -->
+  <rect x="40" y="110" width="250" height="400" rx="10" fill="#ffffff" stroke="#CBD5E0" stroke-width="2"/>
+  <text x="165" y="138" text-anchor="middle" font-size="15" font-weight="700" fill="#1a202c">3D printer</text>
+  <text x="165" y="156" text-anchor="middle" font-size="12" fill="#4a5568">(Elegoo Neptune 4 Plus)</text>
+
+  <!-- Integrierte Beleuchtung (ersetzt die LED-Leiste aus v1) -->
+  <rect x="70" y="176" width="190" height="46" rx="6" fill="#fffbea" stroke="#2f855a" stroke-width="1.5"/>
+  <rect x="80" y="184" width="170" height="8" rx="3" fill="#f6e05e" stroke="#d69e2e"/>
+  <text x="165" y="207" text-anchor="middle" font-size="11" fill="#4a5568">Printer's built-in lighting</text>
+  <text x="165" y="219" text-anchor="middle" font-size="10.5" fill="#2f855a" font-weight="600">Rule: always on while printing</text>
+
+  <!-- Druckbett + Spaghetti -->
+  <rect x="80" y="330" width="170" height="14" rx="3" fill="#edf2f7" stroke="#CBD5E0"/>
+  <path d="M 105 326 q 8 -18 16 -2 q 8 14 16 -4 q 9 -16 17 0 q 8 16 16 2 q 8 -16 16 -2 q 8 12 15 0"
+        fill="none" stroke="#cc0000" stroke-width="2.5" stroke-linecap="round"/>
+  <text x="165" y="362" text-anchor="middle" font-size="12" fill="#cc0000" font-weight="600">Failed print (“spaghetti”)</text>
+
+  <!-- Moonraker -->
+  <rect x="60" y="430" width="210" height="60" rx="8" fill="#edf2f7" stroke="#CBD5E0" stroke-width="1.5"/>
+  <text x="165" y="455" text-anchor="middle" font-size="13" font-weight="600" fill="#1a202c">Klipper + Moonraker API</text>
+  <text x="165" y="473" text-anchor="middle" font-size="11" fill="#4a5568">HTTP, port 80 (stock firmware)</text>
+
+  <!-- ══ Kamera ══ -->
+  <rect x="290" y="245" width="152" height="102" rx="8" fill="#ffffff" stroke="#2f855a" stroke-width="2"/>
+  <circle cx="311" cy="272" r="9" fill="#edf2f7" stroke="#1a202c" stroke-width="2"/>
+  <circle cx="311" cy="272" r="3.5" fill="#1a202c"/>
+  <text x="372" y="270" text-anchor="middle" font-size="12" font-weight="600" fill="#1a202c">Arducam NoIR</text>
+  <text x="372" y="288" text-anchor="middle" font-size="11" fill="#4a5568">632 × 480</text>
+  <text x="366" y="312" text-anchor="middle" font-size="11" fill="#2f855a" font-weight="600">3D-printed mount</text>
+  <text x="366" y="330" text-anchor="middle" font-size="10.5" fill="#4a5568">Arm · tray · pan/tilt</text>
+  
+
+  <line x1="240" y1="322" x2="293" y2="300" stroke="#4a5568" stroke-width="1.5" stroke-dasharray="5 4"/>
+
+  <!-- ══ UNO Q ══ -->
+  <rect x="475" y="110" width="330" height="470" rx="10" fill="#ffffff" stroke="#1a202c" stroke-width="2.5"/>
+  <text x="640" y="138" text-anchor="middle" font-size="15" font-weight="700" fill="#1a202c">Arduino UNO Q + UNO Media Carrier</text>
+  <text x="640" y="156" text-anchor="middle" font-size="10.5" fill="#2f855a" font-weight="600">starts automatically with the board via systemd</text>
+
+  <!-- Linux -->
+  <rect x="495" y="168" width="290" height="250" rx="8" fill="#f0f7ff" stroke="#0066cc" stroke-width="1.5"/>
+  <text x="640" y="190" text-anchor="middle" font-size="13" font-weight="700" fill="#0066cc">Linux — Qualcomm QRB2210 (App Lab)</text>
+
+  <rect x="515" y="202" width="250" height="32" rx="6" fill="#ffffff" stroke="#CBD5E0"/>
+  <text x="640" y="223" text-anchor="middle" font-size="12" fill="#1a202c">One frame every 15 s — only while printing</text>
+  <line x1="640" y1="234" x2="640" y2="246" stroke="#1a202c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="515" y="248" width="250" height="52" rx="6" fill="#ffffff" stroke="#2f855a" stroke-width="1.5"/>
+  <text x="640" y="268" text-anchor="middle" font-size="12" font-weight="600" fill="#1a202c">FOMO-AD v2 (.eim)</text>
+  <text x="640" y="284" text-anchor="middle" font-size="11" fill="#2f855a">160 × 160 squash · 67 ms · float32</text>
+  <text x="640" y="296" text-anchor="middle" font-size="10.5" fill="#4a5568">learns only what normal looks like</text>
+  <line x1="640" y1="300" x2="640" y2="312" stroke="#1a202c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="515" y="314" width="250" height="32" rx="6" fill="#ffffff" stroke="#CBD5E0"/>
+  <text x="640" y="335" text-anchor="middle" font-size="12" fill="#1a202c">Time filter: 3 of 4 checks → alarm</text>
+
+  <rect x="515" y="356" width="250" height="46" rx="6" fill="#f0fff4" stroke="#2f855a" stroke-width="1.5"/>
+  <text x="640" y="374" text-anchor="middle" font-size="12" font-weight="600" fill="#2f855a">Rotating training buffer</text>
+  <text x="640" y="391" text-anchor="middle" font-size="10.5" fill="#4a5568">up to 2500 images for re-training</text>
+
+  <!-- Bridge -->
+  <line x1="640" y1="418" x2="640" y2="450" stroke="#1a202c" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="655" y="440" font-size="12" font-weight="600" fill="#1a202c">Bridge</text>
+
+  <!-- MCU -->
+  <rect x="495" y="452" width="290" height="108" rx="8" fill="#fff8ef" stroke="#d69e2e" stroke-width="1.5"/>
+  <text x="640" y="475" text-anchor="middle" font-size="13" font-weight="700" fill="#975a16">MCU — STM32U585 (Zephyr, real time)</text>
+  <text x="640" y="497" text-anchor="middle" font-size="12" fill="#1a202c">8×13 LED matrix: blinking alarm</text>
+  <text x="640" y="514" text-anchor="middle" font-size="11" fill="#4a5568">keeps blinking even if Linux hangs</text>
+  <g fill="#cc0000">
+    <rect x="600" y="526" width="7" height="7" rx="1.5"/><rect x="610" y="526" width="7" height="7" rx="1.5"/><rect x="620" y="526" width="7" height="7" rx="1.5"/>
+    <rect x="600" y="536" width="7" height="7" rx="1.5"/><rect x="610" y="536" width="7" height="7" rx="1.5"/><rect x="620" y="536" width="7" height="7" rx="1.5"/>
+    <rect x="640" y="526" width="7" height="7" rx="1.5" fill="#edf2f7" stroke="#CBD5E0"/><rect x="650" y="526" width="7" height="7" rx="1.5" fill="#edf2f7" stroke="#CBD5E0"/>
+    <rect x="640" y="536" width="7" height="7" rx="1.5" fill="#edf2f7" stroke="#CBD5E0"/><rect x="650" y="536" width="7" height="7" rx="1.5" fill="#edf2f7" stroke="#CBD5E0"/>
+  </g>
+
+  <!-- CSI -->
+  <line x1="444" y1="295" x2="493" y2="295" stroke="#1a202c" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="466" y="286" text-anchor="middle" font-size="10.5" font-weight="600" fill="#1a202c">CSI</text>
+
+  <!-- Auto-Pause (noch aus) -->
+  <path d="M 495 400 L 372 400 L 372 420 L 280 448" fill="none" stroke="#cc0000" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrowRed)"/>
+  <text x="300" y="393" font-size="11.5" font-weight="600" fill="#cc0000">HTTP: pause the print</text>
+  <text x="300" y="408" font-size="10.5" fill="#cc0000">deliberately switched off for now</text>
+
+  <!-- ══ Home Assistant ══ -->
+  <rect x="880" y="110" width="280" height="230" rx="10" fill="#ffffff" stroke="#CBD5E0" stroke-width="2"/>
+  <text x="1020" y="137" text-anchor="middle" font-size="15" font-weight="700" fill="#1a202c">Home Assistant</text>
+  <rect x="900" y="150" width="240" height="28" rx="6" fill="#edf2f7" stroke="#CBD5E0"/>
+  <text x="1020" y="169" text-anchor="middle" font-size="12" fill="#1a202c">Mosquitto-Broker (MQTT)</text>
+  <text x="1020" y="199" text-anchor="middle" font-size="11.5" fill="#4a5568">added automatically via MQTT discovery:</text>
+  <text x="1020" y="220" text-anchor="middle" font-size="11" font-family="Consolas, monospace" fill="#1a202c">binary_sensor.spaghetti_alarm</text>
+  <text x="1020" y="238" text-anchor="middle" font-size="11" font-family="Consolas, monospace" fill="#1a202c">sensor.anomaly_score</text>
+  <text x="1020" y="256" text-anchor="middle" font-size="11" font-family="Consolas, monospace" fill="#1a202c">sensor.watchdog_status</text>
+  <text x="1020" y="274" text-anchor="middle" font-size="11" font-family="Consolas, monospace" fill="#2f855a">camera.alarm_bild</text>
+  <text x="1020" y="296" text-anchor="middle" font-size="10.5" fill="#2f855a" font-weight="600">annotated evidence photo in HA</text>
+  <text x="1020" y="318" text-anchor="middle" font-size="11" fill="#4a5568">+ offline watchdog automation</text>
+
+  <line x1="807" y1="240" x2="878" y2="240" stroke="#0066cc" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <text x="842" y="228" text-anchor="middle" font-size="11.5" font-weight="600" fill="#0066cc">MQTT</text>
+
+  <!-- ══ Status-Webseite ══ -->
+  <rect x="880" y="366" width="280" height="150" rx="10" fill="#ffffff" stroke="#2f855a" stroke-width="2"/>
+  <text x="1020" y="392" text-anchor="middle" font-size="14" font-weight="700" fill="#2f855a">Status web page</text>
+  <rect x="900" y="404" width="240" height="22" rx="4" fill="#edf2f7" stroke="#CBD5E0"/>
+  <text x="1020" y="420" text-anchor="middle" font-size="11" font-family="Consolas, monospace" fill="#1a202c">http://&lt;uno-q&gt;:7000</text>
+  <text x="1020" y="446" text-anchor="middle" font-size="11.5" fill="#4a5568">Live view for aiming the camera</text>
+  <text x="1020" y="464" text-anchor="middle" font-size="11.5" fill="#4a5568">annotated alarm image</text>
+  <text x="1020" y="482" text-anchor="middle" font-size="11.5" fill="#4a5568">every setting in the browser</text>
+  <text x="1020" y="503" text-anchor="middle" font-size="10.5" fill="#cc0000">no login — run it on your own LAN only</text>
+  <line x1="807" y1="430" x2="878" y2="430" stroke="#1a202c" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="842" y="420" text-anchor="middle" font-size="10.5" font-weight="600" fill="#1a202c">HTTP</text>
+
+  <!-- ══ Smartphone ══ -->
+  <rect x="965" y="545" width="110" height="150" rx="12" fill="#ffffff" stroke="#1a202c" stroke-width="2.5"/>
+  <rect x="977" y="565" width="86" height="96" rx="4" fill="#edf2f7"/>
+  <rect x="983" y="575" width="74" height="34" rx="4" fill="#fff4f4" stroke="#cc0000"/>
+  <text x="1020" y="589" text-anchor="middle" font-size="9.5" font-weight="700" fill="#cc0000">Spaghetti alarm!</text>
+  <text x="1020" y="602" text-anchor="middle" font-size="8.5" fill="#4a5568">Go check the printer!</text>
+  <circle cx="1020" cy="678" r="7" fill="none" stroke="#4a5568" stroke-width="1.5"/>
+  <path d="M 1160 200 L 1182 200 L 1182 620 L 1079 620" fill="none" stroke="#1a202c" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="1176" y="410" text-anchor="middle" font-size="11" font-weight="600" fill="#1a202c" transform="rotate(-90 1176 410)">Push notification</text>
+
+  <!-- ══ Lernschleife ══ -->
+  <rect x="40" y="600" width="820" height="120" rx="10" fill="#f7fbf8" stroke="#2f855a" stroke-width="2"/>
+  <text x="60" y="626" font-size="14" font-weight="700" fill="#2f855a">The learning loop</text>
+
+  <rect x="60" y="640" width="170" height="56" rx="7" fill="#ffffff" stroke="#CBD5E0"/>
+  <text x="145" y="662" text-anchor="middle" font-size="12" font-weight="600" fill="#1a202c">Upload the buffer</text>
+  <text x="145" y="680" text-anchor="middle" font-size="10.5" fill="#4a5568">images of successful prints</text>
+  <line x1="232" y1="668" x2="266" y2="668" stroke="#2f855a" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+  <rect x="268" y="640" width="170" height="56" rx="7" fill="#ffffff" stroke="#CBD5E0"/>
+  <text x="353" y="662" text-anchor="middle" font-size="12" font-weight="600" fill="#1a202c">Edge Impulse</text>
+  <text x="353" y="680" text-anchor="middle" font-size="10.5" fill="#4a5568">train · measure the threshold</text>
+  <line x1="440" y1="668" x2="474" y2="668" stroke="#2f855a" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+  <rect x="476" y="640" width="170" height="56" rx="7" fill="#ffffff" stroke="#CBD5E0"/>
+  <text x="561" y="662" text-anchor="middle" font-size="12" font-weight="600" fill="#1a202c">New .eim onto the board</text>
+  <text x="561" y="680" text-anchor="middle" font-size="10.5" fill="#4a5568">keep the old model in place</text>
+  <line x1="648" y1="668" x2="682" y2="668" stroke="#2f855a" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+  <rect x="684" y="640" width="160" height="56" rx="7" fill="#ffffff" stroke="#CBD5E0"/>
+  <text x="764" y="662" text-anchor="middle" font-size="12" font-weight="600" fill="#1a202c">Set the threshold</text>
+  <text x="764" y="680" text-anchor="middle" font-size="10.5" fill="#4a5568">from the score distributions</text>
+
+  <!-- Banner -->
+  <rect x="40" y="740" width="1120" height="44" rx="8" fill="#eef7ee" stroke="#38a169" stroke-width="1.5"/>
+  <text x="600" y="767" text-anchor="middle" font-size="14" font-weight="600" fill="#1a202c">100 % local: the camera image never leaves your LAN — no cloud account, no subscription, works offline</text>
+
+  <text x="1160" y="812" text-anchor="end" font-size="10.5" fill="#a0aec0">raspberry.tips · Spaghetti Watchdog · System overview v2 · 2026 · CC BY 4.0</text>
+</svg>
