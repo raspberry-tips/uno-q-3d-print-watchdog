@@ -1,0 +1,17 @@
+[Unit]
+Description=Spaghetti-Waechter nach dem Booten starten
+Requires=arduino-app-cli.service
+After=arduino-app-cli.service docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=arduino
+Group=arduino
+Environment=HOME=/home/arduino
+ExecStart=/home/arduino/waechter_autostart.sh
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

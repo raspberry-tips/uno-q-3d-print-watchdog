@@ -1,0 +1,12 @@
+name: Spaghetti-Waechter
+description: Erkennt misslungene 3D-Drucke (Spaghetti) per FOMO-AD-Anomalieerkennung, meldet an Home Assistant (MQTT Discovery), pausiert optional den Drucker via Moonraker und alarmiert lokal auf der LED-Matrix.
+icon: 🍝
+ports: []
+bricks:
+  - arduino:web_ui:      # Status-Webseite (Log + Bild) auf Port 7000
+  - arduino:visual_anomaly_detection:
+      # Ordnername unter /home/arduino/.arduino-bricks/models/custom-ei/
+      # (eigenes FOMO-AD-Modell aus Edge Impulse, .eim nach
+      #  /home/arduino/.arduino-bricks/ei-models/ kopieren + model.yaml anlegen —
+      #  oder ab App Lab 0.5.0 direkt aus dem Studio deployen)
+      model: spaghetti-fomo-ad-v1

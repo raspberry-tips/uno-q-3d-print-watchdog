@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🍝 Spaghetti Watchdog</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f5f2ec; color: #333; }
+  header { background: #2d5016; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 1.15em; margin: 0; }
+  .pill { padding: 3px 12px; border-radius: 999px; font-weight: 600; background: #888; }
+  .pill.watching { background: #3a7d1e; }
+  .pill.idle, .pill.warmup { background: #b58900; }
+  .pill.alarm { background: #c0392b; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .55; } }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px; max-width: 1400px; margin: auto; }
+  section { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  section h2 { font-size: .95em; margin: 0 0 8px; color: #2d5016; }
+  img { width: 100%; border-radius: 4px; background: #ddd; min-height: 120px; }
+  pre { grid-column: 1 / -1; background: #1e1e1e; color: #9fdf9f; padding: 12px; border-radius: 8px;
+        font-size: .8em; max-height: 320px; overflow-y: auto; margin: 0 14px 14px; white-space: pre-wrap; }
+  .score { font-size: 1.5em; font-weight: 700; }
+  details { max-width: 1400px; margin: 0 auto 14px; padding: 0 14px; }
+  details > div { background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  summary { cursor: pointer; font-weight: 600; color: #2d5016; padding: 6px 0; }
+  fieldset { border: 1px solid #ddd; border-radius: 6px; margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 12px; }
+  legend { font-size: .85em; color: #666; }
+  fieldset label { font-size: .85em; display: flex; flex-direction: column; gap: 3px; }
+  fieldset label.check { flex-direction: row; align-items: center; gap: 6px; }
+  fieldset input[type=number], fieldset input[type=text], fieldset input[type=password] {
+    padding: 5px; border: 1px solid #bbb; border-radius: 4px; width: 130px; }
+  button { background: #2d5016; color: #fff; border: 0; border-radius: 6px; padding: 8px 22px; font-weight: 600; cursor: pointer; }
+  #cfgmsg { margin-left: 10px; font-size: .9em; }
+  .info { cursor: help; color: #2d5016; font-weight: 700; border: 1px solid #2d5016; border-radius: 50%;
+          display: inline-block; width: 15px; height: 15px; line-height: 15px; text-align: center;
+          font-size: .75em; margin-left: 4px; vertical-align: middle; }
+  @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🍝 Spaghetti Watchdog</h1>
+  <span class="pill" id="status">–</span>
+  <span>Score: <span class="score" id="score">–</span> / threshold <span id="thresh">–</span></span>
+  <span id="printer"></span>
+</header>
+<main>
+  <section><h2>Current camera view</h2><img id="frame" alt="current camera view"></section>
+  <section><h2>Last alarm (marked regions)</h2><img id="alarmimg" alt="" style="display:none"><p id="noalarm" style="color:#888">No alarm so far — fingers crossed. 🤞</p></section>
+</main>
+<details>
+  <summary>⚙️ Settings</summary>
+  <div>
+  <form id="cfgform">
+    <fieldset><legend>Detection</legend>
+      <label>Threshold<span class="info" title="Anomaly score above which a frame counts as suspicious. Calibrate it so normal prints stay clearly below and real failures land above (Edge Impulse model testing helps).">i</span>
+        <input type="number" step="0.5" name="SCORE_THRESHOLD"></label>
+      <label>Interval (s)<span class="info" title="Seconds between two checks. 15 s catches a failing print early without stressing the board.">i</span>
+        <input type="number" name="CHECK_INTERVAL_S"></label>
+      <label>Alarm window<span class="info" title="Number of recent checks considered for the alarm decision. Works together with 'Alarm hits'.">i</span>
+        <input type="number" name="ALARM_WINDOW"></label>
+      <label>Alarm hits<span class="info" title="The alarm fires only when at least this many checks within the alarm window were suspicious — a single outlier never pauses a 9-hour print.">i</span>
+        <input type="number" name="ALARM_HITS"></label>
+      <label>Warm-up (s)<span class="info" title="During the first N seconds of print time (homing, purge line) scores are shown but do not count towards the alarm — those scenes were not part of the training data. 0 disables the warm-up.">i</span>
+        <input type="number" name="PRINT_WARMUP_S"></label>
+    </fieldset>
+    <fieldset><legend>Behaviour</legend>
+      <label class="check"><input type="checkbox" name="ONLY_WHILE_PRINTING"> only check while printing<span class="info" title="Only evaluate frames while Moonraker reports an active print. The camera image on this page updates either way.">i</span></label>
+      <label class="check"><input type="checkbox" name="AUTO_PAUSE"> pause printer on alarm<span class="info" title="Send a regular pause (head parks, no emergency stop) to Moonraker when the alarm fires. Enable only after validating the threshold on real prints.">i</span></label>
+      <label class="check"><input type="checkbox" name="COLLECT_TRAINING_FRAMES"> collect training frames<span class="info" title="Keep a rolling buffer (max 1000) of inconspicuous frames in data/training/ — ready to upload to Edge Impulse for re-training, e.g. after lighting or camera changes.">i</span></label>
+    </fieldset>
+    <fieldset><legend>Connections</legend>
+      <label>Moonraker host<span class="info" title="IP or hostname of the printer running Moonraker (Klipper). Takes effect immediately.">i</span>
+        <input type="text" name="MOONRAKER_HOST"></label>
+      <label>MQTT host<span class="info" title="IP of your MQTT broker, e.g. the Home Assistant Mosquitto add-on. Takes effect after an app restart.">i</span>
+        <input type="text" name="MQTT_HOST"></label>
+      <label>MQTT port<span class="info" title="Broker port, default 1883. Takes effect after an app restart.">i</span>
+        <input type="number" name="MQTT_PORT"></label>
+      <label>MQTT user<span class="info" title="Broker login. With the Mosquitto add-on this is a Home Assistant user (person ≠ user!). Takes effect after an app restart.">i</span>
+        <input type="text" name="MQTT_USER"></label>
+      <label>MQTT password<span class="info" title="Stored in plain text in data/settings.json and visible to anyone on your network — use a dedicated local-only user. Takes effect after an app restart.">i</span>
+        <input type="password" name="MQTT_PASSWORD"></label>
+    </fieldset>
+    <button type="submit">Save</button><span id="cfgmsg"></span>
+  </form>
+  </div>
+</details>
+<pre id="log">Waiting for data …</pre>
+<script>
+async function refresh() {
+  try {
+    const s = await (await fetch("state")).json();
+    const st = s.alarm ? "alarm" : s.status;
+    const pill = document.getElementById("status");
+    pill.textContent = s.alarm ? "ALARM" : s.status;
+    pill.className = "pill " + st;
+    document.getElementById("score").textContent = s.score.toFixed(1);
+    document.getElementById("thresh").textContent = s.threshold;
+    document.getElementById("printer").textContent = s.printer ? "Printer: " + s.printer : "";
+    document.getElementById("log").textContent = s.log.join("\n") || "(no events yet)";
+    if (s.frame_b64) document.getElementById("frame").src = "data:image/jpeg;base64," + s.frame_b64;
+    if (s.alarm_b64) {
+      const ai = document.getElementById("alarmimg");
+      ai.src = "data:image/jpeg;base64," + s.alarm_b64;
+      ai.style.display = "";
+      document.getElementById("noalarm").style.display = "none";
+    }
+  } catch (e) { document.getElementById("status").textContent = "offline"; }
+}
+refresh();
+setInterval(refresh, 5000);
+
+async function loadConfig() {
+  try {
+    const c = await (await fetch("config")).json();
+    for (const el of document.getElementById("cfgform").elements) {
+      if (!el.name || !(el.name in c)) continue;
+      if (el.type === "checkbox") el.checked = c[el.name]; else el.value = c[el.name];
+    }
+  } catch (e) {}
+}
+document.getElementById("cfgform").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const data = {};
+  for (const el of ev.target.elements) {
+    if (!el.name) continue;
+    data[el.name] = el.type === "checkbox" ? el.checked
+                  : el.type === "number" ? parseFloat(el.value) : el.value;
+  }
+  const msg = document.getElementById("cfgmsg");
+  try {
+    const r = await fetch("config", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    msg.textContent = r.ok ? "saved ✓" : "error " + r.status;
+    if (r.ok) loadConfig();
+  } catch (e) { msg.textContent = "no connection"; }
+  setTimeout(() => msg.textContent = "", 4000);
+});
+loadConfig();
+</script>
+</body>
+</html>

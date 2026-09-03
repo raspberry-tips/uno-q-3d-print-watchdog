@@ -1,0 +1,12 @@
+[Unit]
+Description=Trainingsbild-Sammler (no anomaly, alle 10s)
+Requisite=liveview.service
+After=liveview.service
+
+[Service]
+User=arduino
+ExecStart=/home/arduino/capture.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
