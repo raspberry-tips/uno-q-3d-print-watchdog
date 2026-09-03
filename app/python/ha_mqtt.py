@@ -1,13 +1,13 @@
-# ha_mqtt.py — Home-Assistant-Anbindung via MQTT Discovery (Mosquitto).
-# Entitaeten erscheinen automatisch unter einem Geraet "Spaghetti-Waechter":
+# ha_mqtt.py - Home Assistant integration over MQTT discovery (Mosquitto).
+# Four entities appear on their own under a device "Spaghetti Watchdog":
 #   binary_sensor.spaghetti_alarm   (device_class: problem)
-#   sensor.spaghetti_score          (letzter Anomalie-Score)
+#   sensor.spaghetti_score          (last anomaly score)
 #   sensor.spaghetti_status         (watching / idle / offline)
+#   camera.alarm_bild               (the annotated alarm frame)
 #
-# ⚠️ VERIFY-1: paho-mqtt im App-Lab-Container. Falls das Paket fehlt:
-#   im App-Lab-Terminal `pip install paho-mqtt` bzw. requirements pruefen —
-#   die App faellt sonst kontrolliert auf "kein MQTT" zurueck (laeuft weiter,
-#   LED-Alarm + Auto-Pause funktionieren unabhaengig davon).
+# Needs paho-mqtt in the App Lab container. If the package is missing the app
+# falls back to running without MQTT - the LED alarm and the optional pause
+# keep working, you just lose the Home Assistant side.
 
 import json
 
@@ -33,7 +33,7 @@ class HaMqtt:
         self.client = mqtt.Client(client_id=dev_id)
         if user:
             self.client.username_pw_set(user, password)
-        # Last Will: Broker meldet uns als offline, wenn die App wegstirbt
+        # Last will: the broker reports us offline if the app dies
         self.client.will_set(self.avail_t, "offline", retain=True)
         self.client.on_connect = self._on_connect
         self._device = {
@@ -49,7 +49,7 @@ class HaMqtt:
             self.log.warning(f"MQTT connection failed: {e}")
             self.client = None
 
-    # ── Discovery ─────────────────────────────────────────────
+    # -- Discovery ---------------------------------------------
     def _on_connect(self, client, userdata, flags, rc):
         if rc != 0:
             self.log.warning(f"MQTT rc={rc}")
@@ -88,7 +88,7 @@ class HaMqtt:
         topic = f"{self.prefix}/{component}/{self.dev_id}/{key}/config"
         self.client.publish(topic, json.dumps(cfg), retain=True)
 
-    # ── Zustaende ─────────────────────────────────────────────
+    # -- States ------------------------------------------------
     def publish_alarm(self, on: bool):
         if self.client:
             self.client.publish(f"{self.base}/alarm", "ON" if on else "OFF", retain=True)
@@ -102,7 +102,7 @@ class HaMqtt:
             self.client.publish(f"{self.base}/status", status, retain=True)
 
     def publish_alarm_image(self, jpeg: bytes):
-        """Markiertes Alarm-Bild als MQTT-Camera (retain: HA zeigt den letzten
-        Alarm auch nach einem Neustart noch)."""
+        """Annotated alarm frame as an MQTT camera. Retained, so Home Assistant
+        still shows the last alarm after a restart."""
         if self.client:
             self.client.publish(f"{self.base}/alarm_image", jpeg, retain=True)
