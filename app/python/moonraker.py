@@ -1,9 +1,10 @@
-# moonraker.py — schmaler Moonraker-Client fuer den Spaghetti-Waechter.
-# Kein Zusatzpaket noetig (urllib statt requests — laeuft im App-Container sicher).
+# moonraker.py - a thin Moonraker client for the Spaghetti Watchdog.
+# No extra package needed (urllib instead of requests, so it runs in the
+# app container as-is).
 #
-# Neptune 4 Plus: Moonraker 1.5.0 ab Werk auf Port 80 (nginx-Proxy),
-# im LAN ohne Auth, trusted_clients enthaelt 192.168.0.0/16 (Eigenbefund
-# 13.08.2026). Gate B (Zugriff VOM UNO Q aus): tools/gate_b_moonraker.sh.
+# On an Elegoo Neptune 4 Plus, Moonraker ships on port 80 behind an nginx
+# proxy - not the 7125 most tutorials name - and answers on the LAN without
+# authentication, because trusted_clients covers the local subnet.
 
 import json
 import urllib.request
@@ -31,18 +32,18 @@ class Moonraker:
             return False
 
     def print_state(self) -> str:
-        """'printing' | 'paused' | 'complete' | 'standby' | 'error' | 'unbekannt'"""
+        """'printing' | 'paused' | 'complete' | 'standby' | 'error' | 'unknown'"""
         d = self._get("/printer/objects/query?print_stats")
         try:
             return d["result"]["status"]["print_stats"]["state"]
         except (KeyError, TypeError):
-            return "unbekannt"
+            return "unknown"
 
     def is_printing(self) -> bool:
         return self.print_state() == "printing"
 
     def print_duration(self) -> float:
-        """Sekunden reine Druckzeit (ohne Aufheizen) — 0.0 wenn unbekannt."""
+        """Seconds of actual printing (excluding heat-up); 0.0 if unknown."""
         d = self._get("/printer/objects/query?print_stats")
         try:
             return float(d["result"]["status"]["print_stats"]["print_duration"])
@@ -50,7 +51,7 @@ class Moonraker:
             return 0.0
 
     def pause(self) -> bool:
-        """Sauberes Pausieren (Kopf parkt). BEWUSST kein Not-Aus (M112)."""
+        """Clean pause - the head parks. Deliberately NOT an e-stop (M112)."""
         return self._post("/printer/print/pause")
 
     def reachable(self) -> bool:
