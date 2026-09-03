@@ -27,6 +27,7 @@ from arduino.app_bricks.visual_anomaly_detection import VisualAnomalyDetection
 from arduino.app_bricks.web_ui import WebUI
 
 import config
+import training_data
 from ha_mqtt import HaMqtt
 from moonraker import Moonraker
 
@@ -67,13 +68,22 @@ TUNABLES = {  # name -> (type, min, max)
     "ONLY_WHILE_PRINTING": (bool, None, None),
     "AUTO_PAUSE": (bool, None, None),
     "COLLECT_TRAINING_FRAMES": (bool, None, None),
+    "TRAINING_FRAME_MAX": (int, 50, 20000),
     "MOONRAKER_HOST": (str, None, None),
     "MQTT_HOST": (str, None, None),
     "MQTT_PORT": (int, 1, 65535),
     "MQTT_USER": (str, None, None),
     "MQTT_PASSWORD": (str, None, None),
+    "EI_API_KEY": (str, None, None),
+    "EI_LABEL": (str, None, None),
+    "EI_PROJECT_ID": (str, None, None),
+    "EI_UPLOAD_BATCH": (int, 1, 50),
+    "EI_DELETE_AFTER_UPLOAD": (bool, None, None),
 }
 RESTART_KEYS = {"MQTT_HOST", "MQTT_PORT", "MQTT_USER", "MQTT_PASSWORD"}
+# Secrets never travel back to the browser, and an empty field in the
+# form means "unchanged" - otherwise every save would wipe them.
+SECRET_KEYS = {"MQTT_PASSWORD", "EI_API_KEY"}
 
 def _apply_settings(values, save=False):
     global hits, printer
@@ -90,6 +100,8 @@ def _apply_settings(values, save=False):
             v = max(lo, min(hi, v))
         if typ is str:
             v = v.strip()
+            if not v and k in SECRET_KEYS:
+                continue                   # empty field = keep the secret
         setattr(config, k, v)
         applied[k] = v
     if config.ALARM_HITS > config.ALARM_WINDOW:
@@ -99,16 +111,29 @@ def _apply_settings(values, save=False):
     if "printer" in globals() and "MOONRAKER_HOST" in applied:
         printer = Moonraker(config.MOONRAKER_HOST)
     STATE["threshold"] = config.SCORE_THRESHOLD
-    current = {k: getattr(config, k) for k in TUNABLES}
     if save and applied:
         os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
         with open(SETTINGS_FILE, "w") as f:
-            json.dump(current, f, indent=2)
-        shown = {k: ("***" if k == "MQTT_PASSWORD" else v) for k, v in applied.items()}
+            json.dump({k: getattr(config, k) for k in TUNABLES}, f, indent=2)
+        try:
+            os.chmod(SETTINGS_FILE, 0o600)   # holds MQTT and EI credentials
+        except OSError:
+            pass
+        shown = {k: ("***" if k in SECRET_KEYS else v) for k, v in applied.items()}
         note("Settings saved: " + ", ".join(f"{k}={v}" for k, v in shown.items()))
         if RESTART_KEYS & applied.keys():
             note("MQTT change - takes effect after the next app restart.", warn=True)
-    return current
+    return _public_config()
+
+
+def _public_config():
+    """Settings for the browser: no secrets, but a flag telling whether
+    one is stored (leave the field empty to keep it)."""
+    out = {k: getattr(config, k) for k in TUNABLES}
+    for k in SECRET_KEYS:
+        out[k] = ""
+        out[k + "_SET"] = bool(getattr(config, k))
+    return out
 
 try:  # lay the saved settings over the defaults at startup
     with open(SETTINGS_FILE) as f:
@@ -119,8 +144,79 @@ except (OSError, ValueError):
 def _post_config(data: dict):
     return _apply_settings(data, save=True)
 
-web.expose_api("GET", "/config", lambda: {k: getattr(config, k) for k in TUNABLES})
+web.expose_api("GET", "/config", _public_config)
 web.expose_api("POST", "/config", _post_config)
+
+# -- Training buffer in the web interface ---------------------
+# Browse, upload, purge - the workflow that used to need SSH. The
+# parameterised queries are POSTs with a JSON body, the same route the app
+# already uses for /config.
+uploader = training_data.EdgeImpulseUploader(log)
+
+
+def _training_state():
+    s = training_data.stats(config.TRAINING_FRAME_DIR)
+    s["max"] = config.TRAINING_FRAME_MAX
+    s["collecting"] = config.COLLECT_TRAINING_FRAMES
+    s["key_set"] = bool(config.EI_API_KEY)
+    s["label"] = config.EI_LABEL
+    s["upload"] = uploader.status()
+    return s
+
+
+def _post_page(data: dict):
+    return training_data.page(config.TRAINING_FRAME_DIR,
+                              data.get("offset", 0), data.get("limit", 24))
+
+
+def _post_image(data: dict):
+    return training_data.image(config.TRAINING_FRAME_DIR,
+                               str(data.get("name", "")))
+
+
+def _post_upload(data: dict):
+    delete_after = bool(data.get("delete_after", config.EI_DELETE_AFTER_UPLOAD))
+    r = uploader.start(config.TRAINING_FRAME_DIR, config.EI_API_KEY,
+                       config.EI_LABEL, config.EI_UPLOAD_BATCH, delete_after,
+                       config.EI_PROJECT_ID, note)
+    note(r["message"], warn=not r["started"])
+    return r
+
+
+def _post_zip(data: dict):
+    return training_data.archive(config.TRAINING_FRAME_DIR, data.get("names"))
+
+
+def _post_delete(data: dict):
+    if uploader.status()["running"]:
+        return {"deleted": 0, "message": "Upload in progress - delete blocked."}
+    r = training_data.delete(config.TRAINING_FRAME_DIR, data.get("names"))
+    if r["deleted"] or r["errors"]:
+        note("Training buffer: " + r["message"], warn=bool(r["errors"]))
+    return r
+
+
+def _post_purge(data: dict):
+    if uploader.status()["running"]:
+        return {"deleted": 0, "message": "Upload in progress - purge blocked."}
+    if not data.get("confirm"):
+        return {"deleted": 0, "message": "Confirmation missing."}
+    r = training_data.purge(config.TRAINING_FRAME_DIR)
+    msg = f"Training buffer purged: {r['deleted']} frames deleted."
+    if r["errors"]:
+        msg += f" {r['errors']} could not be deleted."
+    note(msg, warn=bool(r["errors"]))
+    r["message"] = msg
+    return r
+
+
+web.expose_api("GET", "/training", _training_state)
+web.expose_api("POST", "/training/page", _post_page)
+web.expose_api("POST", "/training/image", _post_image)
+web.expose_api("POST", "/training/upload", _post_upload)
+web.expose_api("POST", "/training/zip", _post_zip)
+web.expose_api("POST", "/training/delete", _post_delete)
+web.expose_api("POST", "/training/purge", _post_purge)
 
 # -- Building blocks (settings are loaded, config is final now) -
 anomaly = VisualAnomalyDetection()
