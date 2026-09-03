@@ -34,6 +34,30 @@
   .info { cursor: help; color: #2d5016; font-weight: 700; border: 1px solid #2d5016; border-radius: 50%;
           display: inline-block; width: 15px; height: 15px; line-height: 15px; text-align: center;
           font-size: .75em; margin-left: 4px; vertical-align: middle; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 10px; }
+  button.danger { background: #c0392b; }
+  button.ghost { background: #fff; color: #2d5016; border: 1px solid #2d5016; }
+  button[disabled] { opacity: .45; cursor: default; }
+  .muted { color: #666; font-size: .85em; margin: 0 0 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  .grid figure { margin: 0; position: relative; }
+  .grid img { min-height: 0; cursor: zoom-in; border: 1px solid #ddd; display: block; }
+  .grid figure.sel img { border-color: #2d5016; box-shadow: 0 0 0 3px #2d5016; }
+  .grid figcaption { font-size: .7em; color: #666; text-align: center; }
+  .grid input[type=checkbox] { position: absolute; top: 5px; left: 5px; width: 17px; height: 17px;
+    cursor: pointer; accent-color: #2d5016; background: #fff; border-radius: 3px; }
+  #lbdl { color: #fff; background: #2d5016; border-radius: 6px; padding: 6px 18px;
+          text-decoration: none; font-size: .85em; font-weight: 600; }
+  #tpages { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  #tpages button { background: #fff; color: #2d5016; border: 1px solid #cbd5e0;
+                   border-radius: 5px; padding: 5px 10px; font-weight: 600; min-width: 34px; }
+  #tpages button.current { background: #2d5016; color: #fff; border-color: #2d5016; opacity: 1; }
+  #tpages span { color: #999; padding: 0 2px; }
+  #tsize { padding: 4px; border: 1px solid #bbb; border-radius: 4px; }
+  #lightbox { position: fixed; inset: 0; z-index: 9; background: rgba(0,0,0,.86); cursor: zoom-out;
+              display: none; align-items: center; justify-content: center; flex-direction: column; gap: 8px; }
+  #lightbox img { width: auto; min-height: 0; max-width: 94vw; max-height: 84vh; }
+  #lightbox span { color: #eee; font-size: .85em; }
   @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -67,7 +91,20 @@
     <fieldset><legend>Behaviour</legend>
       <label class="check"><input type="checkbox" name="ONLY_WHILE_PRINTING"> only check while printing<span class="info" title="Only evaluate frames while Moonraker reports an active print. The camera image on this page updates either way.">i</span></label>
       <label class="check"><input type="checkbox" name="AUTO_PAUSE"> pause printer on alarm<span class="info" title="Send a regular pause (head parks, no emergency stop) to Moonraker when the alarm fires. Enable only after validating the threshold on real prints.">i</span></label>
-      <label class="check"><input type="checkbox" name="COLLECT_TRAINING_FRAMES"> collect training frames<span class="info" title="Keep a rolling buffer (max 1000) of inconspicuous frames in data/training/ — ready to upload to Edge Impulse for re-training, e.g. after lighting or camera changes.">i</span></label>
+      <label class="check"><input type="checkbox" name="COLLECT_TRAINING_FRAMES"> collect training frames<span class="info" title="Keep a rolling buffer of inconspicuous frames in data/training/ — ready to upload to Edge Impulse for re-training, e.g. after lighting or camera changes. Browse, upload and purge it under 'Training frames' below.">i</span></label>
+      <label>Buffer size<span class="info" title="Maximum number of frames kept in data/training/. Once it is full the oldest frame is deleted for every new one — roughly 100 kB per frame.">i</span>
+        <input type="number" name="TRAINING_FRAME_MAX"></label>
+    </fieldset>
+    <fieldset><legend>Edge Impulse upload</legend>
+      <label>API key<span class="info" title="Edge Impulse Studio → Dashboard → Keys. Stored in data/settings.json on the board and never sent back to this page. Leave empty to keep the stored key. Note: the default key may upload and deploy but cannot start a training run — that needs an admin key.">i</span>
+        <input type="password" name="EI_API_KEY" autocomplete="off"></label>
+      <label>Label<span class="info" title="Label the uploaded frames get in Edge Impulse. For visual anomaly detection (FOMO-AD) the normal frames must be labelled exactly 'no anomaly'.">i</span>
+        <input type="text" name="EI_LABEL"></label>
+      <label>Batch size<span class="info" title="Frames per upload request. 20 is a good compromise between speed and request size on the UNO Q.">i</span>
+        <input type="number" name="EI_UPLOAD_BATCH"></label>
+      <label>Project ID<span class="info" title="Optional. If set, the app asks Edge Impulse how many training samples the project holds after an upload — a cross-check before you purge the buffer.">i</span>
+        <input type="text" name="EI_PROJECT_ID"></label>
+      <label class="check"><input type="checkbox" name="EI_DELETE_AFTER_UPLOAD"> delete frames after upload<span class="info" title="Default for the checkbox in the 'Training frames' panel: remove a frame from the buffer once Edge Impulse has accepted it. Off means you verify the count in the Studio first and purge manually.">i</span></label>
     </fieldset>
     <fieldset><legend>Connections</legend>
       <label>Moonraker host<span class="info" title="IP or hostname of the printer running Moonraker (Klipper). Takes effect immediately.">i</span>
@@ -85,6 +122,37 @@
   </form>
   </div>
 </details>
+<details id="tdetails">
+  <summary>🖼️ Training frames <span id="tcount"></span></summary>
+  <div>
+    <p class="muted" id="tinfo">…</p>
+    <div class="row">
+      <button type="button" id="tup">Upload to Edge Impulse</button>
+      <label class="check"><input type="checkbox" id="tdel"> delete after upload</label>
+      <button type="button" id="tpurge" class="danger">Purge buffer</button>
+      <button type="button" id="trefresh" class="ghost">Refresh</button>
+      <span id="tmsg"></span>
+    </div>
+    <div class="row">
+      <span class="muted" id="tselinfo" style="margin:0">Tick frames to work on single files (shift-click selects a range).</span>
+      <button type="button" id="tzip" class="ghost">Download selection (ZIP)</button>
+      <button type="button" id="tdelsel" class="danger">Delete selection</button>
+      <button type="button" id="tselall" class="ghost">Select page</button>
+      <button type="button" id="tselnone" class="ghost">Clear</button>
+    </div>
+    <p class="muted" id="tprogress"></p>
+    <div class="grid" id="tgrid"></div>
+    <div class="row" style="margin-top:10px">
+      <button type="button" id="tprev" class="ghost">‹ newer</button>
+      <span id="tpages"></span>
+      <button type="button" id="tnext" class="ghost">older ›</button>
+      <span class="muted" id="tpage" style="margin:0"></span>
+      <label class="check muted" style="margin:0">per page
+        <select id="tsize"><option>24</option><option>48</option><option>96</option></select></label>
+    </div>
+  </div>
+</details>
+<div id="lightbox"><img id="lbimg" alt="training frame"><span id="lbname"></span><a id="lbdl" download>Download this frame</a></div>
 <pre id="log">Waiting for data …</pre>
 <script>
 async function refresh() {
@@ -110,6 +178,7 @@ async function refresh() {
 refresh();
 setInterval(refresh, 5000);
 
+const SECRETS = ["MQTT_PASSWORD", "EI_API_KEY"];
 async function loadConfig() {
   try {
     const c = await (await fetch("config")).json();
@@ -117,6 +186,12 @@ async function loadConfig() {
       if (!el.name || !(el.name in c)) continue;
       if (el.type === "checkbox") el.checked = c[el.name]; else el.value = c[el.name];
     }
+    // Secrets never come back - the field only says whether one is stored.
+    for (const k of SECRETS) {
+      const el = document.getElementsByName(k)[0];
+      if (el) el.placeholder = c[k + "_SET"] ? "stored – empty = keep" : "not set";
+    }
+    document.getElementById("tdel").checked = !!c.EI_DELETE_AFTER_UPLOAD;
   } catch (e) {}
 }
 document.getElementById("cfgform").addEventListener("submit", async ev => {
@@ -137,6 +212,243 @@ document.getElementById("cfgform").addEventListener("submit", async ev => {
   setTimeout(() => msg.textContent = "", 4000);
 });
 loadConfig();
+
+// -- Training frames: browse, upload, purge ------------------
+// Every parameterised query is a POST with a JSON body - the same route
+// the app already uses for /config.
+const T = { offset: 0, total: 0, limit: 24, poll: null, armed: false,
+            sel: new Set(), names: [], last: null, delArmed: false };
+const $ = id => document.getElementById(id);
+
+async function jpost(path, body) {
+  const r = await fetch(path, { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+function tmsg(text) {
+  $("tmsg").textContent = text;
+  if (text) setTimeout(() => { if ($("tmsg").textContent === text) $("tmsg").textContent = ""; }, 8000);
+}
+function niceName(n) {
+  const m = n.match(/^(\d{4})(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)/);
+  return m ? `${m[3]}.${m[2]}. ${m[4]}:${m[5]}:${m[6]}` : n;
+}
+async function loadTraining(withPage = true) {
+  try {
+    const t = await (await fetch("training")).json();
+    const u = t.upload;
+    $("tcount").textContent = "(" + t.count + ")";
+    $("tinfo").textContent =
+      `${t.count} frames in the buffer (max ${t.max}) · ${(t.bytes / 1048576).toFixed(1)} MB · `
+      + `collecting: ${t.collecting ? "on" : "off"} · label "${t.label}" · `
+      + `API key: ${t.key_set ? "stored" : "MISSING — enter it under Settings"}`;
+    $("tprogress").textContent = u.running
+      ? `Uploading … ${u.sent + u.duplicates} of ${u.total} done `
+        + `(${u.sent} new, ${u.duplicates} already in project, ${u.failed} failed)`
+      : (u.message || "");
+    $("tup").disabled = u.running || t.count === 0;
+    $("tpurge").disabled = u.running || t.count === 0;
+    if (u.running && !T.poll) T.poll = setInterval(() => loadTraining(false), 3000);
+    if (!u.running && T.poll) { clearInterval(T.poll); T.poll = null; loadPage(0); }
+    if (withPage) loadPage(T.offset);
+  } catch (e) { tmsg("no connection"); }
+}
+async function loadPage(offset) {
+  try {
+    const d = await jpost("training/page", { offset, limit: T.limit });
+    T.offset = d.offset; T.total = d.total;
+    const grid = $("tgrid");
+    grid.textContent = "";
+    T.names = d.items.map(i => i.name);
+    T.last = null;
+    d.items.forEach((it, idx) => {
+      const fig = document.createElement("figure");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = T.sel.has(it.name);
+      box.title = "select this frame";
+      // Shift-click marks the range - for "the last N failure frames".
+      box.addEventListener("click", ev => {
+        if (ev.shiftKey && T.last !== null) {
+          const [a, b] = [Math.min(T.last, idx), Math.max(T.last, idx)];
+          for (let i = a; i <= b; i++) markFrame(T.names[i], box.checked);
+        } else {
+          markFrame(it.name, box.checked);
+        }
+        T.last = idx;
+        paintSelection();
+      });
+      const img = document.createElement("img");
+      img.src = "data:image/jpeg;base64," + it.b64;
+      img.alt = it.name;
+      img.title = it.name + " · " + it.kb + " kB";
+      img.addEventListener("click", () => openImage(it.name));
+      const cap = document.createElement("figcaption");
+      cap.textContent = niceName(it.name);
+      fig.append(box, img, cap);
+      grid.append(fig);
+    });
+    paintSelection();
+    $("tpage").textContent = d.total
+      ? `newest ${d.offset + 1}–${d.offset + d.items.length} of ${d.total}`
+      : "buffer is empty";
+    $("tprev").disabled = d.offset === 0;
+    $("tnext").disabled = d.offset + T.limit >= d.total;
+    renderPager(d.total, d.offset, T.limit);
+  } catch (e) { tmsg("could not load frames"); }
+}
+// Numbered pages: always first and last, plus a window around the current
+// one, gaps as "…". A few thousand frames make a lot of pages, and reaching
+// the middle of the buffer must not take forty clicks — so the gap itself
+// is a button that jumps into the middle of the pages it hides.
+function renderPager(total, offset, limit) {
+  const nav = $("tpages");
+  nav.textContent = "";
+  const pages = Math.max(1, Math.ceil(total / limit));
+  const cur = Math.floor(offset / limit);
+  if (pages < 2) return;
+  const jump = (page, label, title, current) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.title = title;
+    if (current) b.className = "current";
+    b.addEventListener("click", () => loadPage(page * limit));
+    nav.append(b);
+  };
+  const span = p => `frames ${p * limit + 1}–${Math.min((p + 1) * limit, total)}`;
+  const wanted = [...new Set([0, 1, cur - 2, cur - 1, cur, cur + 1, cur + 2,
+                              pages - 2, pages - 1])]
+    .filter(p => p >= 0 && p < pages).sort((a, b) => a - b);
+  let prev = -1;
+  for (const p of wanted) {
+    if (p - prev > 1) {
+      const mid = prev + 1 + Math.floor((p - prev - 1) / 2);
+      jump(mid, "…", `jump to page ${mid + 1} (${span(mid)})`, false);
+    }
+    jump(p, String(p + 1), span(p), p === cur);
+    prev = p;
+  }
+}
+$("tsize").addEventListener("change", ev => {
+  const first = T.offset;                  // stay where the reader currently is
+  T.limit = parseInt(ev.target.value, 10) || 24;
+  loadPage(Math.floor(first / T.limit) * T.limit);
+});
+
+async function openImage(name) {
+  try {
+    const d = await jpost("training/image", { name });
+    if (d.error) { tmsg(d.error); return; }
+    const src = "data:image/jpeg;base64," + d.b64;
+    $("lbimg").src = src;
+    $("lbname").textContent = `${d.name} · ${d.kb} kB — click the background to close`;
+    const dl = $("lbdl");
+    dl.href = src;
+    dl.download = d.name;
+    $("lightbox").style.display = "flex";
+  } catch (e) { tmsg("could not load image"); }
+}
+
+// -- Selecting single frames ---------------------------------
+// The workflow behind it: for a print that only fails near the end,
+// download the last frames (those belong in the test set as `anomaly`),
+// delete them here - and upload the rest as normal `no anomaly` data.
+function markFrame(name, on) {
+  if (on) T.sel.add(name); else T.sel.delete(name);
+}
+function paintSelection() {
+  const n = T.sel.size;
+  document.querySelectorAll("#tgrid figure").forEach(fig => {
+    const box = fig.querySelector("input");
+    const name = fig.querySelector("img").alt;
+    box.checked = T.sel.has(name);
+    fig.classList.toggle("sel", box.checked);
+  });
+  $("tselinfo").textContent = n
+    ? `${n} frame${n > 1 ? "s" : ""} selected`
+    : "Tick frames to work on single files (shift-click selects a range).";
+  $("tzip").disabled = n === 0;
+  $("tdelsel").disabled = n === 0;
+  if (!n && T.delArmed) { T.delArmed = false; $("tdelsel").textContent = "Delete selection"; }
+}
+function b64Save(b64, type, name) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 20000);
+}
+$("lbdl").addEventListener("click", ev => ev.stopPropagation());
+$("tselall").addEventListener("click", () => {
+  T.names.forEach(n => T.sel.add(n));
+  paintSelection();
+});
+$("tselnone").addEventListener("click", () => { T.sel.clear(); paintSelection(); });
+$("tzip").addEventListener("click", async () => {
+  const names = [...T.sel];
+  tmsg(`packing ${names.length} frames …`);
+  try {
+    const d = await jpost("training/zip", { names });
+    if (d.error) { tmsg(d.error); return; }
+    b64Save(d.b64, "application/zip", d.name);
+    tmsg(`${d.count} frames · ${d.kb} kB → ${d.name}`);
+  } catch (e) { tmsg("could not build the ZIP"); }
+});
+$("tdelsel").addEventListener("click", async () => {
+  const btn = $("tdelsel");
+  if (!T.delArmed) {                      // the second click really deletes
+    T.delArmed = true;
+    btn.textContent = `Really delete ${T.sel.size}?`;
+    setTimeout(() => { if (T.delArmed) { T.delArmed = false; btn.textContent = "Delete selection"; } }, 6000);
+    return;
+  }
+  T.delArmed = false;
+  btn.textContent = "Delete selection";
+  const names = [...T.sel];
+  try {
+    const r = await jpost("training/delete", { names });
+    tmsg(r.message || `${r.deleted} deleted`);
+    if (r.deleted || r.missing) names.forEach(n => T.sel.delete(n));
+    loadTraining();
+  } catch (e) { tmsg("delete failed"); }
+});
+$("lightbox").addEventListener("click", ev => { ev.currentTarget.style.display = "none"; });
+$("tdetails").addEventListener("toggle", ev => { if (ev.target.open) loadTraining(); });
+$("trefresh").addEventListener("click", () => loadTraining());
+$("tprev").addEventListener("click", () => loadPage(Math.max(0, T.offset - T.limit)));
+$("tnext").addEventListener("click", () => loadPage(T.offset + T.limit));
+$("tup").addEventListener("click", async () => {
+  try {
+    const r = await jpost("training/upload", { delete_after: $("tdel").checked });
+    tmsg(r.message);
+    loadTraining(false);
+  } catch (e) { tmsg("upload could not be started"); }
+});
+// Two-click confirmation instead of a browser dialog - the second click deletes.
+$("tpurge").addEventListener("click", async () => {
+  const btn = $("tpurge");
+  if (!T.armed) {
+    T.armed = true;
+    btn.textContent = `Really delete ${T.total} frames?`;
+    setTimeout(() => { if (T.armed) { T.armed = false; btn.textContent = "Purge buffer"; } }, 6000);
+    return;
+  }
+  T.armed = false;
+  btn.textContent = "Purge buffer";
+  try {
+    const r = await jpost("training/purge", { confirm: true });
+    tmsg(r.message || r.deleted + " frames deleted");
+    loadTraining();
+  } catch (e) { tmsg("purge failed"); }
+});
 </script>
 </body>
 </html>
