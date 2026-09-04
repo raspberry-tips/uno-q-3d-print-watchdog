@@ -84,11 +84,17 @@ def render(meshes, fname, elev=30, azim=-60, pad=0.05, figsize=(10, 7.5)):
 arm = trimesh.load(os.path.join(STL, "halterung-arm.stl"))
 wanne = trimesh.load(os.path.join(STL, "uno-q-wanne.stl"))
 adapter = trimesh.load(os.path.join(STL, "kamera-adapter.stl"))
+adapter_lang = trimesh.load(os.path.join(STL, "kamera-adapter-lang.stl"))
+spacer4 = trimesh.load(os.path.join(STL, "spacer-3mm-4x.stl"))
 
 render([(arm, ORANGE)], "halterung-arm.png", elev=30, azim=-62, figsize=(11, 6))
 # Blick von der Zungen-Seite, sonst verdecken die Waende die zwei Haltezapfen
 render([(wanne, GRAU)], "uno-q-wanne.png", elev=34, azim=118, figsize=(9, 8))
 render([(adapter, BLAU)], "kamera-adapter.png", elev=26, azim=-58, figsize=(9, 7))
+# long variant: slot instead of hole, fork slides 30 mm on the beam screw
+render([(adapter_lang, BLAU)], "kamera-adapter-lang.png", elev=32, azim=-62, figsize=(11, 6))
+# 3 mm washers (4-up print plate) for the beam screw on the long adapter
+render([(spacer4, GRAU)], "spacer-3mm.png", elev=40, azim=-60, figsize=(8, 7))
 
 # Uebersicht: alle drei so angeordnet, wie sie auf der Druckplatte liegen
 w2 = wanne.copy()
