@@ -14,11 +14,11 @@
 > |---|---|
 > | `app.yaml` | bricks: `visual_anomaly_detection` + `web_ui` |
 > | `python/main.py` | the cycle described above |
-> | `python/config.py` | defaults — everything is also editable in the browser |
+> | `python/config.py` | defaults — everything is also editable in the browser, including the camera rotation |
 > | `python/ha_mqtt.py` | MQTT discovery, four entities plus last will |
 > | `python/moonraker.py` | print state, duration and pause over plain urllib |
 > | `python/training_data.py` | the training buffer: gallery, Edge Impulse upload, purge |
-> | `assets/index.html` | status page on port 7000: live frame, last alarm with markers, log, all settings |
+> | `assets/index.html` | status page on port 7000: live frame, recording start/stop, last alarm with markers, log, all settings |
 > | `sketch/sketch.ino` | LED-matrix alarm and heartbeat, `Bridge.provide("set_alarm")` |
 >
 > **Install:** download `spaghetti-waechter.zip`, then *Import App* in App Lab (or
@@ -39,6 +39,20 @@
 > stored in `data/settings.json` and never sent back to the page. Uploads run
 > in the background, so the watchdog keeps watching, and only frames that the
 > API really accepted are ever deleted.
+>
+> **Recording by hand.** By default the buffer only fills while a print runs.
+> Under the live frame, *Start recording* saves every frame right away —
+> printing or not, no threshold filter — for a fresh scene after moving the
+> camera or changing the light; a red **REC** badge blinks in the header.
+> *Stop recording* saves nothing, *Automatic* returns to the default. Start and
+> Stop are not persisted: an app restart goes back to automatic, so a forgotten
+> Stop cannot silently starve the next re-training.
+>
+> **Camera rotation.** *Settings → Camera* rotates the image in 90° steps
+> (default 180°, the camera hangs upside down over the bed). The GStreamer
+> pipeline restarts within one cycle. The rotation is part of the image
+> pipeline, so a model trained in the old orientation no longer matches:
+> record fresh frames and re-train — the log says so when you save.
 >
 > **Safety defaults:** auto-pause is off; pausing parks the head and is not an
 > emergency stop. The status page has **no login** — keep it on your own LAN.
@@ -62,10 +76,12 @@ spaghetti-waechter/
 ├── python/
 │   ├── main.py         Zyklus: printing? → Frame → detect → 3-von-4-Filter → Aktionen
 │   ├── config.py       Defaults — alles auch im Webinterface einstellbar (Port 7000)
+│   │                   inkl. Kamera-Drehung (0/90/180/270°)
 │   ├── ha_mqtt.py      MQTT Discovery (Alarm, Score, Status, Alarm-Bild-Kamera, LWT)
 │   ├── moonraker.py    print_state / print_duration / pause (urllib, kein Zusatzpaket)
 │   └── training_data.py  Trainings-Puffer: Galerie, Edge-Impulse-Upload, Purge
-├── assets/index.html   Status-Webseite: Livebild, Alarm-Bild, Log, Einstellungen, Galerie
+├── assets/index.html   Status-Webseite: Livebild, Aufnahme Start/Stop, Alarm-Bild, Log,
+│                       Einstellungen, Galerie
 └── sketch/sketch.ino   LED-Matrix: Blink-Alarm + Herzschlag; Bridge.provide("set_alarm")
 ```
 
@@ -97,8 +113,21 @@ FOMO-AD immer die konkrete Szene lernt.
 ## Trainings-Puffer im Webinterface
 
 Der Wächter legt jeden unauffälligen Frame in `data/training/` ab (rotierend,
-Größe einstellbar). Unter **🖼️ Training frames** auf der Statusseite läuft der
-komplette Re-Training-Ablauf ohne SSH:
+Größe einstellbar). Das ist der **Automatik-Modus**: aufgezeichnet wird nur,
+während Moonraker „printing" meldet. Direkt unter dem Livebild lässt sich die
+Aufnahme zusätzlich **von Hand starten und stoppen**:
+
+- **Start recording** — ab sofort landet jeder Frame im Puffer, egal ob
+  gedruckt wird oder nicht und ohne Schwellen-Filter. Gedacht für eine frische
+  Szene nach Kamera- oder Lichtwechsel oder für Drucke, die Moonraker nicht
+  kennt. Im Header blinkt dann **REC**.
+- **Stop recording** — es wird nichts mehr gespeichert, auch nicht automatisch.
+- **Automatic** — zurück zum Standardverhalten. Start/Stop werden nicht
+  gespeichert: nach einem App-Neustart läuft die Aufnahme wieder automatisch,
+  damit ein vergessenes „Stop" nicht still den nächsten Trainingslauf aushungert.
+
+Unter **🖼️ Training frames** auf der Statusseite läuft der komplette
+Re-Training-Ablauf ohne SSH:
 
 1. **Ansehen** — Galerie mit Thumbnails, neueste zuerst, blätterbar; Klick
    öffnet den Frame in Originalgröße. So fällt vor dem Upload auf, wenn sich
@@ -134,8 +163,15 @@ wird ein Batch nur, wenn er vollständig angekommen ist.
 6. In der `app.yaml` den Platzhalter durch euren Modellnamen ersetzen und
    die Schwelle aus den eigenen Score-Verteilungen bestimmen (Teil 5)
 7. Einstellungen im Browser: `http://<board-ip>:7000` → ⚙️ Settings
-   (Schwelle, Moonraker-IP, MQTT-Zugang, Edge-Impulse-Key — MQTT gilt nach
-   App-Neustart, alles andere sofort)
+   (Schwelle, Moonraker-IP, MQTT-Zugang, Edge-Impulse-Key, Kamera-Drehung —
+   MQTT gilt nach App-Neustart, alles andere sofort)
+
+**Kamera-Drehung:** Unter Settings → Camera lässt sich das Bild in 90°-Schritten
+drehen (Standard 180°, die Kamera hängt kopfüber über dem Bett). Die App startet
+dazu die GStreamer-Pipeline neu, das Livebild folgt innerhalb eines Zyklus. Die
+Drehung ist Teil der Bild-Pipeline (siehe unten): Wer sie ändert, muss frische
+Trainings-Frames aufnehmen und neu trainieren, sonst passt das Modell nicht mehr
+zur Szene — die App schreibt das beim Speichern auch ins Log.
 
 ⚠️ Die Status-Webseite hat keinen Login — nur im vertrauenswürdigen LAN betreiben
 und einen eigenen, rein lokalen MQTT-Benutzer nur für den Wächter verwenden.
