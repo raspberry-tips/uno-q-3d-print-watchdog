@@ -19,7 +19,7 @@ Written up in a five-part series (German) on
 | Folder | Contents |
 |---|---|
 | [`app/`](app/) | The App Lab application: Python app, Arduino sketch for the LED-matrix alarm, the status web UI, and a ready-to-import `.zip` |
-| [`cad/`](cad/) | Camera mount: 5 printable STLs, the parametric FreeCAD source and the scripts that build and export it |
+| [`cad/`](cad/) | Camera mount: 8 printable STLs (arm, tray, two adapter variants, washer, camera housing), the parametric FreeCAD source and the scripts that build and export it |
 | [`camera-setup/`](camera-setup/) | Bring the CSI camera up, live view for aiming it, frame collector, Edge Impulse upload |
 | [`autostart/`](autostart/) | systemd unit so the watchdog comes back after a reboot |
 
