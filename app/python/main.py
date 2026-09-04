@@ -36,7 +36,9 @@ log = Logger("SpaghettiWaechter")
 # -- Status web page (web_ui brick, port 7000) ----------------
 # Deliberately simple: the page polls GET /state every 5 s, no WebSocket.
 STATE = {"status": "starting", "score": 0.0, "printer": "", "alarm": False,
-         "frame_b64": "", "alarm_b64": "", "threshold": config.SCORE_THRESHOLD}
+         "frame_b64": "", "alarm_b64": "", "threshold": config.SCORE_THRESHOLD,
+         "record_mode": "auto", "recording": False,
+         "rotation": config.CAMERA_ROTATION}
 WEBLOG = deque(maxlen=60)
 
 def note(msg, warn=False):
@@ -69,6 +71,7 @@ TUNABLES = {  # name -> (type, min, max)
     "AUTO_PAUSE": (bool, None, None),
     "COLLECT_TRAINING_FRAMES": (bool, None, None),
     "TRAINING_FRAME_MAX": (int, 50, 20000),
+    "CAMERA_ROTATION": (int, 0, 270),
     "MOONRAKER_HOST": (str, None, None),
     "MQTT_HOST": (str, None, None),
     "MQTT_PORT": (int, 1, 65535),
@@ -88,6 +91,7 @@ SECRET_KEYS = {"MQTT_PASSWORD", "EI_API_KEY"}
 def _apply_settings(values, save=False):
     global hits, printer
     applied = {}
+    old_rotation = config.CAMERA_ROTATION
     for k, v in dict(values).items():
         if k not in TUNABLES:
             continue
@@ -102,6 +106,10 @@ def _apply_settings(values, save=False):
             v = v.strip()
             if not v and k in SECRET_KEYS:
                 continue                   # empty field = keep the secret
+        if k == "CAMERA_ROTATION":
+            v = (round(v / 90) * 90) % 360     # only 90-degree steps
+            if v != config.CAMERA_ROTATION:
+                _request_pipeline_restart()    # picked up by the main loop
         setattr(config, k, v)
         applied[k] = v
     if config.ALARM_HITS > config.ALARM_WINDOW:
@@ -111,6 +119,7 @@ def _apply_settings(values, save=False):
     if "printer" in globals() and "MOONRAKER_HOST" in applied:
         printer = Moonraker(config.MOONRAKER_HOST)
     STATE["threshold"] = config.SCORE_THRESHOLD
+    STATE["rotation"] = config.CAMERA_ROTATION
     if save and applied:
         os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
         with open(SETTINGS_FILE, "w") as f:
@@ -123,7 +132,20 @@ def _apply_settings(values, save=False):
         note("Settings saved: " + ", ".join(f"{k}={v}" for k, v in shown.items()))
         if RESTART_KEYS & applied.keys():
             note("MQTT change - takes effect after the next app restart.", warn=True)
+        if config.CAMERA_ROTATION != old_rotation:
+            note(f"Camera rotation {config.CAMERA_ROTATION} deg - the model was "
+                 "trained on the old orientation: collect new frames and re-train.",
+                 warn=True)
     return _public_config()
+
+
+_gst_restart = False
+
+def _request_pipeline_restart():
+    """Settings arrive on the web thread; the pipeline belongs to the main
+    loop, which restarts it on its next cycle."""
+    global _gst_restart
+    _gst_restart = True
 
 
 def _public_config():
@@ -154,10 +176,38 @@ web.expose_api("POST", "/config", _post_config)
 uploader = training_data.EdgeImpulseUploader(log)
 
 
+# -- Recording by hand ----------------------------------------
+# "auto" is the classic behaviour: while a print runs, every frame below the
+# threshold goes into the buffer (if COLLECT_TRAINING_FRAMES is on). "on"
+# records every cycle regardless of the printer - for aiming the camera,
+# capturing the idle scene or a print Moonraker does not know about. "off"
+# records nothing. The override is not persisted: an app restart returns to
+# "auto", so a forgotten "off" cannot silently starve the next re-training.
+RECORD_MODES = ("auto", "on", "off")
+
+
+def _post_record(data: dict):
+    mode = str(data.get("mode", "auto")).lower()
+    if mode not in RECORD_MODES:
+        return {"error": f"mode must be one of {', '.join(RECORD_MODES)}"}
+    if mode != STATE["record_mode"]:
+        STATE["record_mode"] = mode
+        STATE["recording"] = mode == "on"
+        note({"on": "Recording started by hand - every frame goes into the buffer.",
+              "off": "Recording stopped by hand - nothing is saved until switched back.",
+              "auto": "Recording back to automatic (while printing only)."}[mode])
+    return {"record_mode": STATE["record_mode"], "recording": STATE["recording"]}
+
+
+web.expose_api("POST", "/record", _post_record)
+
+
 def _training_state():
     s = training_data.stats(config.TRAINING_FRAME_DIR)
     s["max"] = config.TRAINING_FRAME_MAX
     s["collecting"] = config.COLLECT_TRAINING_FRAMES
+    s["record_mode"] = STATE["record_mode"]
+    s["recording"] = STATE["recording"]
     s["key_set"] = bool(config.EI_API_KEY)
     s["label"] = config.EI_LABEL
     s["upload"] = uploader.status()
@@ -235,10 +285,15 @@ alarm_latched = False
 # same pipeline as the training data (liveview.py): a continuous stream, a
 # converged white balance, videoflip rotate-180.
 LIVE_JPG = "/tmp/spaghetti_live.jpg"
-GST_PIPELINE = ["gst-launch-1.0", "-q", "libcamerasrc", "!",
-                "video/x-raw,width=632,height=480", "!", "videoconvert", "!",
-                "videoflip", "method=rotate-180", "!",
-                "jpegenc", "!", "multifilesink", f"location={LIVE_JPG}"]
+# videoflip names for the four 90-degree steps (clockwise, as seen on screen).
+GST_FLIP = {0: "none", 90: "clockwise", 180: "rotate-180", 270: "counterclockwise"}
+
+def gst_pipeline():
+    flip = GST_FLIP.get(config.CAMERA_ROTATION, "rotate-180")
+    return ["gst-launch-1.0", "-q", "libcamerasrc", "!",
+            "video/x-raw,width=632,height=480", "!", "videoconvert", "!",
+            "videoflip", f"method={flip}", "!",
+            "jpegenc", "!", "multifilesink", f"location={LIVE_JPG}"]
 _gst_proc = None
 
 def _frame_fresh(max_age=6.0):
@@ -248,19 +303,24 @@ def _frame_fresh(max_age=6.0):
         return False
 
 def _ensure_pipeline():
-    """(Re)start the camera pipeline if it is missing or has stalled."""
-    global _gst_proc
-    if _gst_proc is not None and _gst_proc.poll() is None and _frame_fresh():
+    """(Re)start the camera pipeline if it is missing, has stalled or the
+    rotation was changed in the web interface."""
+    global _gst_proc, _gst_restart
+    if (not _gst_restart and _gst_proc is not None
+            and _gst_proc.poll() is None and _frame_fresh()):
         return True
     if _gst_proc is not None:
         _gst_proc.kill()
         _gst_proc.wait(timeout=5)
-        note("Camera pipeline stalled - restarting.", warn=True)
+        note(f"Camera pipeline restarting ({config.CAMERA_ROTATION} deg)."
+             if _gst_restart else "Camera pipeline stalled - restarting.",
+             warn=not _gst_restart)
+    _gst_restart = False
     try:
         os.remove(LIVE_JPG)
     except OSError:
         pass
-    _gst_proc = subprocess.Popen(GST_PIPELINE,
+    _gst_proc = subprocess.Popen(gst_pipeline(),
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(3.0)                        # let the white balance converge
     return _frame_fresh()
@@ -366,6 +426,13 @@ def loop():
     if frame is not None:
         STATE["frame_b64"] = _b64(frame)
 
+    # Recording by hand: every frame, printing or not, no threshold filter -
+    # whoever pressed "start" wants exactly this scene in the buffer.
+    mode = STATE["record_mode"]
+    if mode == "on" and frame is not None:
+        collect_training_frame(frame)
+    STATE["recording"] = mode == "on"
+
     if config.ONLY_WHILE_PRINTING and not printing:
         set_status("idle")
         hits.clear()
@@ -402,8 +469,10 @@ def loop():
     regions = len(result.get("detection", [])) if result else 0
     note(f"Score {score:.1f} | regions {regions} | window {list(hits)}")
 
-    if config.COLLECT_TRAINING_FRAMES and score < config.SCORE_THRESHOLD:
-        collect_training_frame(frame)      # only unremarkable frames
+    if mode == "auto" and config.COLLECT_TRAINING_FRAMES:
+        STATE["recording"] = True
+        if score < config.SCORE_THRESHOLD:
+            collect_training_frame(frame)  # only unremarkable frames
 
     if len(hits) == config.ALARM_WINDOW and sum(hits) >= config.ALARM_HITS:
         set_alarm(True, score, frame, result)
