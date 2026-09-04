@@ -12,6 +12,8 @@
   .pill.watching { background: #3a7d1e; }
   .pill.idle, .pill.warmup { background: #b58900; }
   .pill.alarm { background: #c0392b; animation: blink 1s infinite; }
+  .pill.rec { background: #c0392b; font-size: .8em; }
+  .pill.rec::before { content: "●"; margin-right: 5px; animation: blink 1.2s infinite; }
   @keyframes blink { 50% { opacity: .55; } }
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px; max-width: 1400px; margin: auto; }
   section { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
@@ -27,8 +29,9 @@
   legend { font-size: .85em; color: #666; }
   fieldset label { font-size: .85em; display: flex; flex-direction: column; gap: 3px; }
   fieldset label.check { flex-direction: row; align-items: center; gap: 6px; }
-  fieldset input[type=number], fieldset input[type=text], fieldset input[type=password] {
+  fieldset input[type=number], fieldset input[type=text], fieldset input[type=password], fieldset select {
     padding: 5px; border: 1px solid #bbb; border-radius: 4px; width: 130px; }
+  fieldset select { width: auto; background: #fff; }
   button { background: #2d5016; color: #fff; border: 0; border-radius: 6px; padding: 8px 22px; font-weight: 600; cursor: pointer; }
   #cfgmsg { margin-left: 10px; font-size: .9em; }
   .info { cursor: help; color: #2d5016; font-weight: 700; border: 1px solid #2d5016; border-radius: 50%;
@@ -37,6 +40,11 @@
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 10px; }
   button.danger { background: #c0392b; }
   button.ghost { background: #fff; color: #2d5016; border: 1px solid #2d5016; }
+  .rec-row { margin: 10px 0 6px; }
+  .rec-row button { padding: 6px 14px; font-size: .85em; }
+  .rec-row button.active { box-shadow: 0 0 0 3px rgba(45,80,22,.35); }
+  .rec-state { margin: 0; }
+  .rec-state b { font-weight: 600; }
   button[disabled] { opacity: .45; cursor: default; }
   .muted { color: #666; font-size: .85em; margin: 0 0 10px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
@@ -65,17 +73,35 @@
 <header>
   <h1>🍝 Spaghetti Watchdog</h1>
   <span class="pill" id="status">–</span>
+  <span class="pill rec" id="rec" style="display:none" title="frames are being written to the training buffer">REC</span>
   <span>Score: <span class="score" id="score">–</span> / threshold <span id="thresh">–</span></span>
   <span id="printer"></span>
 </header>
 <main>
-  <section><h2>Current camera view</h2><img id="frame" alt="current camera view"></section>
+  <section><h2>Current camera view</h2><img id="frame" alt="current camera view">
+    <div class="row rec-row">
+      <button type="button" id="recon">Start recording</button>
+      <button type="button" id="recoff" class="danger">Stop recording</button>
+      <button type="button" id="recauto" class="ghost">Automatic</button>
+      <span id="recmsg" class="muted" style="margin:0"></span>
+    </div>
+    <p class="muted rec-state">Recording: <b id="recmode">…</b><span class="info" title="Training-frame recording. Automatic = frames are collected while a print runs (see Settings → collect training frames). Start = every frame is saved right now, printing or not, no threshold filter — for a fresh scene after moving the camera or changing the light. Stop = nothing is saved. Start/Stop are not persisted: after an app restart the recording is automatic again.">i</span></p>
+  </section>
   <section><h2>Last alarm (marked regions)</h2><img id="alarmimg" alt="" style="display:none"><p id="noalarm" style="color:#888">No alarm so far — fingers crossed. 🤞</p></section>
 </main>
 <details>
   <summary>⚙️ Settings</summary>
   <div>
   <form id="cfgform">
+    <fieldset><legend>Camera</legend>
+      <label>Rotation<span class="info" title="Rotate the camera image in 90° steps (clockwise). Applies within one cycle — the camera pipeline restarts. Important: the rotation is part of the image pipeline, so the frames no longer match a model trained in the old orientation. After changing it, record fresh training frames and re-train.">i</span>
+        <select name="CAMERA_ROTATION">
+          <option value="0">0°</option>
+          <option value="90">90°</option>
+          <option value="180">180°</option>
+          <option value="270">270°</option>
+        </select></label>
+    </fieldset>
     <fieldset><legend>Detection</legend>
       <label>Threshold<span class="info" title="Anomaly score above which a frame counts as suspicious. Calibrate it so normal prints stay clearly below and real failures land above (Edge Impulse model testing helps).">i</span>
         <input type="number" step="0.5" name="SCORE_THRESHOLD"></label>
@@ -166,6 +192,7 @@ async function refresh() {
     document.getElementById("thresh").textContent = s.threshold;
     document.getElementById("printer").textContent = s.printer ? "Printer: " + s.printer : "";
     document.getElementById("log").textContent = s.log.join("\n") || "(no events yet)";
+    paintRecording(s.record_mode, s.recording);
     if (s.frame_b64) document.getElementById("frame").src = "data:image/jpeg;base64," + s.frame_b64;
     if (s.alarm_b64) {
       const ai = document.getElementById("alarmimg");
@@ -213,6 +240,37 @@ document.getElementById("cfgform").addEventListener("submit", async ev => {
 });
 loadConfig();
 
+// -- Recording by hand ----------------------------------------
+// POST /record {mode: "on" | "off" | "auto"}; the state page reports the
+// current mode and whether frames are actually being written right now.
+const REC_TEXT = {
+  auto: "automatic — while a print runs",
+  on: "ON — every frame is saved",
+  off: "OFF — nothing is saved",
+};
+function paintRecording(mode, recording) {
+  const el = document.getElementById("recmode");
+  el.textContent = (REC_TEXT[mode] || mode) + (mode === "auto" ? (recording ? " (recording)" : " (waiting)") : "");
+  document.getElementById("rec").style.display = recording ? "" : "none";
+  for (const [id, m] of [["recon", "on"], ["recoff", "off"], ["recauto", "auto"]])
+    document.getElementById(id).classList.toggle("active", mode === m);
+}
+async function setRecording(mode) {
+  const msg = document.getElementById("recmsg");
+  try {
+    const r = await fetch("record", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) });
+    const d = await r.json();
+    if (d.error) { msg.textContent = d.error; return; }
+    paintRecording(d.record_mode, d.recording);
+    msg.textContent = "✓";
+  } catch (e) { msg.textContent = "no connection"; }
+  setTimeout(() => msg.textContent = "", 3000);
+}
+document.getElementById("recon").addEventListener("click", () => setRecording("on"));
+document.getElementById("recoff").addEventListener("click", () => setRecording("off"));
+document.getElementById("recauto").addEventListener("click", () => setRecording("auto"));
+
 // -- Training frames: browse, upload, purge ------------------
 // Every parameterised query is a POST with a JSON body - the same route
 // the app already uses for /config.
@@ -241,7 +299,7 @@ async function loadTraining(withPage = true) {
     $("tcount").textContent = "(" + t.count + ")";
     $("tinfo").textContent =
       `${t.count} frames in the buffer (max ${t.max}) · ${(t.bytes / 1048576).toFixed(1)} MB · `
-      + `collecting: ${t.collecting ? "on" : "off"} · label "${t.label}" · `
+      + `recording: ${t.record_mode === "auto" ? (t.collecting ? "automatic" : "automatic (disabled in Settings)") : t.record_mode.toUpperCase()} · label "${t.label}" · `
       + `API key: ${t.key_set ? "stored" : "MISSING — enter it under Settings"}`;
     $("tprogress").textContent = u.running
       ? `Uploading … ${u.sent + u.duplicates} of ${u.total} done `
