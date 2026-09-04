@@ -5,6 +5,11 @@
 CAMERA_SOURCE = "csi:0"        # camera on the UNO Media Carrier (CSI0)
                                # alternatives: "usb:0", "/dev/video0"
 CAMERA_RESOLUTION = (640, 480)  # libcamera actually delivers 632x480
+CAMERA_ROTATION = 180          # 0, 90, 180 or 270 degrees (clockwise), also
+                               # in the web interface. The rotation is part
+                               # of the image pipeline: change it and the
+                               # frames no longer match the training data -
+                               # collect new frames and re-train.
 
 # -- Check cycle / time filter --------------------------------
 CHECK_INTERVAL_S = 15          # seconds between two checks
@@ -49,7 +54,10 @@ DEBUG_SAVE_LAST = True          # write every scored frame to
 COLLECT_TRAINING_FRAMES = True  # Rotating training buffer: every frame that
 TRAINING_FRAME_DIR = "/app/data/training"   # scores BELOW the threshold is
 TRAINING_FRAME_MAX = 2500       # kept, oldest ones drop out. Pull the folder
-                                # when you want to re-train.
+                                # when you want to re-train. This is the
+                                # AUTOMATIC mode (only while printing); the
+                                # web interface can also start and stop the
+                                # recording by hand, printing or not.
 
 # -- Edge Impulse (uploading the training buffer) -------------
 # Browsing, uploading and purging the buffer all happen in the web
