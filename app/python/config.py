@@ -50,12 +50,41 @@ MARKER_OPACITY = 45             # % red tint on the strongest flagged cell in th
                                 # alarm image; weaker cells fade towards half of
                                 # it. Only cells at or above the threshold are
                                 # tinted at all, so the print stays visible.
-LIVE_OVERLAY = True             # Model view on the live frame: every grid cell
-                                # tinted green by its score (brighter = higher,
-                                # scaled per frame), red once it crosses the
-                                # threshold -
-                                # shows WHERE the model looks, every cycle.
-                                # Off = plain camera image.
+# -- Model view (LIVE_OVERLAY) --------------------------------
+# FOMO-AD does not judge the frame as a whole. It cuts the 160x160 input
+# into a grid of ~400 cells and gives every cell its own anomaly score; the
+# frame score in the header is just the highest cell. The model view paints
+# that grid over the live frame on every cycle, so you watch the model work
+# instead of reading one number:
+#
+#   green  = cell below the threshold. Brightness follows the cell's score,
+#            stretched per frame between the 10th and the 95th percentile
+#            (darkest cells = no tint, hottest normal cells = full green).
+#            Relative on purpose: in observer mode (threshold 100) an absolute
+#            scale would leave everything pale. Once any cell is red, green
+#            saturates exactly at the threshold, so bright green sits right
+#            below red.
+#   red    = cell at or above the threshold, opacity from half to full of
+#            MARKER_OPACITY by score, thin white outline. These are the cells
+#            that count towards the 3-of-4 alarm window.
+#
+# How to read it: bright green or red on the printed part means the model
+# sees the print as unusual - that is the case it was built for. Bright cells
+# on the frame, the gantry, a reflection or a light patch of bed mean the
+# SCENE is unusual to the model, not the print: that is a training-data gap,
+# and the fix is more normal frames of exactly that region, not a higher
+# threshold. The alarm image on the right freezes the moment the red cells
+# tipped the alarm, so you can compare the two afterwards.
+#
+# The header additionally shows the cell distribution (lowest / median /
+# highest) - the gap between median and highest tells you how much of the
+# frame the top score actually represents.
+#
+# Costs a few milliseconds of drawing per cycle, nothing on the inference
+# side. Off = the plain camera image, scoring unchanged.
+LIVE_OVERLAY = True             # True = model view on the live frame,
+                                # False = plain camera image. Also a checkbox
+                                # under Settings -> Behaviour on the web page.
 ALARM_FRAME_DIR = "/app/data/alarme"
 DEBUG_SAVE_LAST = True          # write every scored frame to
                                 # /tmp/spaghetti_debug.jpg (inside the
