@@ -46,6 +46,10 @@ DEVICE_NAME = "Spaghetti Watchdog (UNO Q)"
 # /app is the app folder on the board (~/ArduinoApps/spaghetti-waechter) -
 # the only path that survives an app restart, the container is disposable.
 SAVE_ALARM_FRAMES = True        # keep alarm frames as evidence
+MARKER_OPACITY = 45             # % red tint on the strongest flagged cell in the
+                                # alarm image; weaker cells fade towards half of
+                                # it. Only cells at or above the threshold are
+                                # tinted at all, so the print stays visible.
 ALARM_FRAME_DIR = "/app/data/alarme"
 DEBUG_SAVE_LAST = True          # write every scored frame to
                                 # /tmp/spaghetti_debug.jpg (inside the
