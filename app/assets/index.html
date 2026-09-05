@@ -13,6 +13,7 @@
   .pill.idle, .pill.warmup { background: #b58900; }
   .pill.alarm { background: #c0392b; animation: blink 1s infinite; }
   .pill.rec { background: #c0392b; font-size: .8em; }
+  .pill.muted { background: #7f8c8d; font-size: .8em; }
   .pill.rec::before { content: "●"; margin-right: 5px; animation: blink 1.2s infinite; }
   @keyframes blink { 50% { opacity: .55; } }
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px; max-width: 1400px; margin: auto; }
@@ -74,6 +75,7 @@
   <h1>🍝 Spaghetti Watchdog</h1>
   <span class="pill" id="status">–</span>
   <span class="pill rec" id="rec" style="display:none" title="frames are being written to the training buffer">REC</span>
+  <span class="pill muted" id="mutedpill" style="display:none" title="no new alarms until the print ends">muted</span>
   <span>Score: <span class="score" id="score">–</span> / threshold <span id="thresh">–</span></span>
   <span id="printer"></span>
 </header>
@@ -87,7 +89,15 @@
     </div>
     <p class="muted rec-state">Recording: <b id="recmode">…</b><span class="info" title="Training-frame recording. Automatic = frames are collected while a print runs (see Settings → collect training frames). Start = every frame is saved right now, printing or not, no threshold filter — for a fresh scene after moving the camera or changing the light. Stop = nothing is saved. Start/Stop are not persisted: after an app restart the recording is automatic again.">i</span></p>
   </section>
-  <section><h2>Last alarm (marked regions)</h2><img id="alarmimg" alt="" style="display:none"><p id="noalarm" style="color:#888">No alarm so far — fingers crossed. 🤞</p></section>
+  <section><h2>Last alarm (marked regions)</h2><img id="alarmimg" alt="" style="display:none"><p id="noalarm" style="color:#888">No alarm so far — fingers crossed. 🤞</p>
+    <div class="row rec-row" id="alarmrow" style="display:none">
+      <button type="button" id="alarmreset">Reset alarm</button>
+      <button type="button" id="alarmmute" class="ghost">False alarm — mute until print ends</button>
+      <span class="info" title="Reset clears the alarm in Home Assistant and on the LED matrix and arms the watchdog again — if the scene still scores above the threshold it fires again after a few checks. 'False alarm' clears it too, but suppresses new alarms until Moonraker reports the end of the print. Both are also available as buttons in Home Assistant.">i</span>
+      <span id="alarmmsg" class="muted" style="margin:0"></span>
+    </div>
+    <p class="muted rec-state" id="mutedinfo" style="display:none">Alarm muted until the print ends. <button type="button" id="alarmunmute" class="ghost" style="padding:3px 10px;font-size:.85em">Arm again</button></p>
+  </section>
 </main>
 <details>
   <summary>⚙️ Settings</summary>
@@ -202,6 +212,9 @@ async function refresh() {
       ai.style.display = "";
       document.getElementById("noalarm").style.display = "none";
     }
+    document.getElementById("alarmrow").style.display = s.alarm ? "" : "none";
+    document.getElementById("mutedinfo").style.display = s.muted ? "" : "none";
+    document.getElementById("mutedpill").style.display = s.muted ? "" : "none";
   } catch (e) { document.getElementById("status").textContent = "offline"; }
 }
 refresh();
@@ -272,6 +285,24 @@ async function setRecording(mode) {
 document.getElementById("recon").addEventListener("click", () => setRecording("on"));
 document.getElementById("recoff").addEventListener("click", () => setRecording("off"));
 document.getElementById("recauto").addEventListener("click", () => setRecording("auto"));
+
+// -- Alarm reset -----------------------------------------------
+// POST /alarm/reset {mute: bool}. Plain reset arms the watchdog again;
+// mute keeps it quiet until the print ends. Both also exist as HA buttons.
+async function resetAlarm(mute) {
+  const msg = document.getElementById("alarmmsg");
+  try {
+    const r = await fetch("alarm/reset", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mute }) });
+    const d = await r.json();
+    msg.textContent = d.muted ? "muted until the print ends" : "alarm cleared, watching again";
+    refresh();
+  } catch (e) { msg.textContent = "no connection"; }
+  setTimeout(() => msg.textContent = "", 4000);
+}
+document.getElementById("alarmreset").addEventListener("click", () => resetAlarm(false));
+document.getElementById("alarmmute").addEventListener("click", () => resetAlarm(true));
+document.getElementById("alarmunmute").addEventListener("click", () => resetAlarm(false));
 
 // -- Training frames: browse, upload, purge ------------------
 // Every parameterised query is a POST with a JSON body - the same route
