@@ -9,7 +9,9 @@
 #      no system at all.
 #   4. On alarm: Home Assistant (MQTT), LED matrix (Bridge -> MCU) and,
 #      if enabled, a Moonraker pause
-#   5. The alarm stays latched until the printer is no longer "printing"
+#   5. The alarm stays latched until the printer is no longer "printing" -
+#      or until it is reset from the web page or a Home Assistant button
+#      (plain reset = armed again; "false alarm" = muted until the print ends)
 
 import base64
 import io
@@ -36,6 +38,7 @@ log = Logger("SpaghettiWaechter")
 # -- Status web page (web_ui brick, port 7000) ----------------
 # Deliberately simple: the page polls GET /state every 5 s, no WebSocket.
 STATE = {"status": "starting", "score": 0.0, "printer": "", "alarm": False,
+         "muted": False,
          "frame_b64": "", "alarm_b64": "", "threshold": config.SCORE_THRESHOLD,
          "record_mode": "auto", "recording": False,
          "rotation": config.CAMERA_ROTATION}
@@ -278,6 +281,8 @@ ha = HaMqtt(config.MQTT_HOST, config.MQTT_PORT, config.MQTT_USER,
 
 hits = deque(maxlen=config.ALARM_WINDOW)   # True = this cycle was anomalous
 alarm_latched = False
+alarm_muted = False        # "false alarm": no new alarm until the print ends
+last_printing = False
 
 # -- Frame source ---------------------------------------------
 # Hard-won lesson: the camera peripheral renders with a different white
@@ -433,6 +438,41 @@ def set_alarm(on: bool, score: float = 0.0, frame=None, detection=None):
         except Exception:
             pass
 
+
+def reset_alarm(mute: bool = False, source: str = "web"):
+    """Acknowledge the alarm by hand. Without the reset the watchdog stays
+    blind for the rest of the print: a false alarm in minute four would hide a
+    real failure in hour six. Plain reset = cleared and armed again (it fires
+    again after ALARM_HITS more hits if the scene still scores high). mute =
+    cleared and quiet until Moonraker reports the end of the print."""
+    global alarm_muted
+    was_latched = alarm_latched
+    set_alarm(False)
+    hits.clear()
+    alarm_muted = mute
+    STATE["muted"] = mute
+    note(f"Alarm reset from {source}: "
+         + ("muted until the print ends." if mute else "armed again.")
+         + ("" if was_latched else " (no alarm was active)"))
+    return {"alarm": False, "muted": mute, "was_latched": was_latched}
+
+
+def _post_alarm_reset(data: dict):
+    return reset_alarm(mute=bool(data.get("mute", False)), source="web")
+
+
+def _ha_command(name: str):
+    if name == "reset":
+        reset_alarm(mute=False, source="Home Assistant")
+    elif name == "mute":
+        reset_alarm(mute=True, source="Home Assistant")
+    else:
+        log.warning(f"Unknown MQTT command: {name}")
+
+
+web.expose_api("POST", "/alarm/reset", _post_alarm_reset)
+ha.on_command = _ha_command
+
 # -- Main cycle -----------------------------------------------
 def set_status(status):
     if STATE["status"] != status:
@@ -443,9 +483,21 @@ def set_status(status):
 def loop():
     time.sleep(config.CHECK_INTERVAL_S)
 
+    global last_printing, alarm_muted
     printer_state = printer.print_state()
     STATE["printer"] = printer_state
     printing = printer_state == "printing"
+    if last_printing and not printing:
+        # End of print: release the latch and lift a mute, independent of
+        # ONLY_WHILE_PRINTING (with that switched off the idle branch below
+        # never runs, and an alarm used to stay latched until an app restart).
+        set_alarm(False)
+        hits.clear()
+        if alarm_muted:
+            alarm_muted = False
+            STATE["muted"] = False
+            note("Print ended - alarm mute lifted.")
+    last_printing = printing
 
     # Refresh the camera image on EVERY cycle for the status page (aiming,
     # spot checks) - it is only scored further down, while actually printing.
@@ -498,14 +550,16 @@ def loop():
     hits.append(score >= config.SCORE_THRESHOLD)
     regions = len(result.get("detection", [])) if result else 0
     note(f"Score {score:.1f} | regions {regions} | window {list(hits)}"
-         + (" | alarm latched" if alarm_latched else ""))
+         + (" | alarm latched" if alarm_latched else "")
+         + (" | muted" if alarm_muted else ""))
 
     if mode == "auto" and config.COLLECT_TRAINING_FRAMES:
         STATE["recording"] = True
         if score < config.SCORE_THRESHOLD:
             collect_training_frame(frame)  # only unremarkable frames
 
-    if len(hits) == config.ALARM_WINDOW and sum(hits) >= config.ALARM_HITS:
+    if (not alarm_muted and len(hits) == config.ALARM_WINDOW
+            and sum(hits) >= config.ALARM_HITS):
         set_alarm(True, score, frame, result)
 
 
