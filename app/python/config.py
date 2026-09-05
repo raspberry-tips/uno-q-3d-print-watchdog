@@ -50,6 +50,12 @@ MARKER_OPACITY = 45             # % red tint on the strongest flagged cell in th
                                 # alarm image; weaker cells fade towards half of
                                 # it. Only cells at or above the threshold are
                                 # tinted at all, so the print stays visible.
+LIVE_OVERLAY = True             # Model view on the live frame: every grid cell
+                                # tinted green by its score (brighter = higher,
+                                # scaled per frame), red once it crosses the
+                                # threshold -
+                                # shows WHERE the model looks, every cycle.
+                                # Off = plain camera image.
 ALARM_FRAME_DIR = "/app/data/alarme"
 DEBUG_SAVE_LAST = True          # write every scored frame to
                                 # /tmp/spaghetti_debug.jpg (inside the
