@@ -1,9 +1,13 @@
 # ha_mqtt.py - Home Assistant integration over MQTT discovery (Mosquitto).
-# Four entities appear on their own under a device "Spaghetti Watchdog":
+# Six entities appear on their own under a device "Spaghetti Watchdog":
 #   binary_sensor.spaghetti_alarm   (device_class: problem)
 #   sensor.spaghetti_score          (last anomaly score)
 #   sensor.spaghetti_status         (watching / idle / offline)
 #   camera.alarm_bild               (the annotated alarm frame)
+#   button.alarm_zuruecksetzen      (reset: clear the alarm, arm again)
+#   button.fehlalarm_bis_druckende  (reset + mute until the print ends)
+# The two buttons publish to spaghetti/<id>/cmd/<name>; the app receives them
+# through on_command(name) - the only topics this client subscribes to.
 #
 # Needs paho-mqtt in the App Lab container. If the package is missing the app
 # falls back to running without MQTT - the LED alarm and the optional pause
@@ -25,6 +29,8 @@ class HaMqtt:
         self.prefix = prefix
         self.base = f"spaghetti/{dev_id}"
         self.avail_t = f"{self.base}/availability"
+        self.cmd_t = f"{self.base}/cmd"
+        self.on_command = None          # set by the app: callable(name: str)
         self.connected = False
         if not _PAHO:
             self.log.warning("paho-mqtt missing - Home Assistant link disabled.")
@@ -36,6 +42,7 @@ class HaMqtt:
         # Last will: the broker reports us offline if the app dies
         self.client.will_set(self.avail_t, "offline", retain=True)
         self.client.on_connect = self._on_connect
+        self.client.on_message = self._on_message
         self._device = {
             "identifiers": [dev_id],
             "name": dev_name,
@@ -75,8 +82,34 @@ class HaMqtt:
             "name": "Alarm-Bild",
             "topic": f"{self.base}/alarm_image",
         })
+        # Two buttons so the alarm can be acknowledged from the phone, where
+        # the notification arrives. Names follow the existing German entities.
+        self._announce("button", "reset", {
+            "name": "Alarm zurücksetzen",
+            "command_topic": f"{self.cmd_t}/reset",
+            "payload_press": "RESET",
+            "icon": "mdi:alarm-light-off",
+        })
+        self._announce("button", "mute", {
+            "name": "Fehlalarm bis Druckende",
+            "command_topic": f"{self.cmd_t}/mute",
+            "payload_press": "MUTE",
+            "icon": "mdi:bell-sleep",
+        })
+        self.client.subscribe(f"{self.cmd_t}/#")
         self.client.publish(self.avail_t, "online", retain=True)
         self.log.info("MQTT connected, discovery published.")
+
+    def _on_message(self, client, userdata, msg):
+        """Button presses from Home Assistant: the last topic segment is the
+        command name (reset / mute). Runs on paho's network thread."""
+        name = msg.topic.rsplit("/", 1)[-1]
+        if self.on_command is None:
+            return
+        try:
+            self.on_command(name)
+        except Exception as e:
+            self.log.warning(f"MQTT command {name} failed: {e}")
 
     def _announce(self, component, key, extra):
         cfg = {
