@@ -209,25 +209,38 @@ def _multipart(paths):
     return bytes(body), boundary, used
 
 
+# Ingestion's wording for "you already sent me this" has varied: "duplicate"
+# and, since September 2026, "An item with this hash already exists (ids: ...)".
+# Anything matching here counts as done, not as failed - otherwise a buffer
+# that was already uploaded once trips the three-failures-in-a-row abort.
+DUPLICATE_MARKERS = ("duplicate", "already exists", "same hash")
+
+
 def _batch_result(payload, n_files):
-    """(ok, duplicates, failed) from an ingestion response.
+    """(ok, duplicates, failed, first_error) from an ingestion response.
 
     Prefers files[] - the outer success key describes the batch and would
-    skew the count."""
+    skew the count. first_error is the API's own text for the first real
+    failure, so the status message can say why instead of "no response"."""
     files = payload.get("files") if isinstance(payload, dict) else None
     if isinstance(files, list) and files:
         ok = dup = 0
+        first_error = ""
         for f in files:
             if not isinstance(f, dict):
                 continue
+            err = str(f.get("error", ""))
             if f.get("success"):
                 ok += 1
-            elif "duplicate" in str(f.get("error", "")).lower():
+            elif any(m in err.lower() for m in DUPLICATE_MARKERS):
                 dup += 1              # already in the project = done
-        return ok, dup, max(0, len(files) - ok - dup)
+            elif not first_error:
+                first_error = err
+        return ok, dup, max(0, len(files) - ok - dup), first_error
     if isinstance(payload, dict) and payload.get("success"):
-        return n_files, 0, 0          # response without files[]: batch is ok
-    return 0, 0, n_files
+        return n_files, 0, 0, ""      # response without files[]: batch is ok
+    err = str(payload.get("error", "")) if isinstance(payload, dict) else ""
+    return 0, 0, n_files, err or "unexpected response"
 
 
 def _why(label, detail, limit=110):
@@ -382,7 +395,8 @@ class EdgeImpulseUploader:
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
                 payload = json.loads(r.read().decode("utf-8"))
-            return _batch_result(payload, n_files) + ("", False)
+            ok, dup, failed, err = _batch_result(payload, n_files)
+            return ok, dup, failed, (_why("rejected", err) if failed else ""), False
         except urllib.error.HTTPError as e:
             # 401/403 = wrong key, or one without the ingestion role -
             # abort right away instead of trying it fourteen times.
