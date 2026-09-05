@@ -17,6 +17,7 @@ import base64
 import io
 import json
 import os
+import re
 import subprocess
 import time
 from collections import deque
@@ -56,6 +57,41 @@ def _b64(img):
 
 web = WebUI()
 web.expose_api("GET", "/state", lambda: dict(STATE, log=list(WEBLOG)))
+
+# -- Which model is loaded? -----------------------------------
+# The model is not chosen by this code but by app.yaml (brick
+# arduino:visual_anomaly_detection -> model:). App Lab starts a separate
+# runner container for it from ~/.arduino-bricks/ei-models/<name>.eim,
+# registered through ~/.arduino-bricks/models/custom-ei/<name>/model.yaml.
+# The app folder is mounted at /app, so app.yaml is readable; the model
+# folders are not, which is why only the name and the convention are shown.
+# Changing the model = edit app.yaml, restart the app - there is no runtime
+# switch, so the page at least tells you what is scoring right now.
+APP_YAML = "/app/app.yaml"
+PLACEHOLDER_MODEL = "concrete-crack-anomaly-detection"
+
+
+def loaded_model():
+    name = ""
+    try:
+        with open(APP_YAML, encoding="utf-8") as f:
+            for line in f:
+                line = line.split("#", 1)[0]
+                m = re.match(r"\s*model:\s*(\S+)", line)
+                if m:
+                    name = m.group(1).strip("\"'")
+                    break
+    except OSError:
+        pass
+    return {
+        "name": name or "(not found in app.yaml)",
+        "placeholder": name == PLACEHOLDER_MODEL,
+        "eim": f"~/.arduino-bricks/ei-models/{name}.eim" if name and name != PLACEHOLDER_MODEL else "",
+        "registry": f"~/.arduino-bricks/models/custom-ei/{name}/model.yaml" if name and name != PLACEHOLDER_MODEL else "",
+    }
+
+
+STATE["model"] = loaded_model()
 
 # -- Settings through the web interface -----------------------
 # Every tunable and every connection setting is editable in the browser.
