@@ -14,6 +14,9 @@
   .pill.alarm { background: #c0392b; animation: blink 1s infinite; }
   .pill.rec { background: #c0392b; font-size: .8em; }
   .pill.muted { background: #7f8c8d; font-size: .8em; }
+  #model { font-size: .85em; color: #dfe9d2; cursor: help; }
+  #model b { font-weight: 600; color: #fff; }
+  #model.placeholder b { color: #ffd27f; }
   .pill.rec::before { content: "●"; margin-right: 5px; animation: blink 1.2s infinite; }
   @keyframes blink { 50% { opacity: .55; } }
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px; max-width: 1400px; margin: auto; }
@@ -79,6 +82,7 @@
   <span class="pill muted" id="mutedpill" style="display:none" title="no new alarms until the print ends">muted</span>
   <span>Score: <span class="score" id="score">–</span> / threshold <span id="thresh">–</span></span>
   <span id="cells" class="muted" style="color:#dfe9d2;margin:0" title="anomaly score per grid cell: lowest / median / highest"></span>
+  <span id="model"></span>
   <span id="printer"></span>
 </header>
 <main>
@@ -217,6 +221,15 @@ async function refresh() {
     document.getElementById("overlaynote").style.display = s.overlay ? "" : "none";
     document.getElementById("cells").textContent = s.cells
       ? `cells ${s.cells.n}: min ${s.cells.min} · median ${s.cells.p50} · max ${s.cells.max}` : "";
+    if (s.model) {
+      const el = document.getElementById("model");
+      el.innerHTML = "Model: <b></b>" + (s.model.placeholder ? " (built-in placeholder)" : "");
+      el.querySelector("b").textContent = s.model.name;
+      el.className = s.model.placeholder ? "placeholder" : "";
+      el.title = s.model.placeholder
+        ? "concrete-crack-anomaly-detection is the built-in placeholder that lets the app start before you have trained anything. Its scores mean nothing for a printer - collect frames, train your own FOMO-AD model, register it and put its name into app.yaml."
+        : `Set in app.yaml (brick arduino:visual_anomaly_detection -> model). Model file: ${s.model.eim} - registered via ${s.model.registry}. To switch models edit app.yaml and restart the app; there is no runtime switch.`;
+    }
     if (s.alarm_b64) {
       const ai = document.getElementById("alarmimg");
       ai.src = "data:image/jpeg;base64," + s.alarm_b64;
