@@ -58,6 +58,30 @@ Inference is **67 ms per frame** (float32; int8 measured *slower* at 119 ms,
 there is no integer accelerator here to reward quantisation). The compute was
 never the constraint in this project — the image was.
 
+## The status page
+
+The app serves a small web page on port 7000 — no login, so keep it on your own
+LAN. Everything below happens there; SSH is only needed once, to register the
+model.
+
+![Status page: live camera view with the recording buttons underneath, and the last alarm with the flagged cells drawn on](docs/ui-status.png)
+
+*Live view and the last alarm. The three buttons start and stop the
+training-frame recording by hand; the default is automatic, collecting only
+while a print runs.*
+
+![Settings: camera rotation, detection, behaviour, Edge Impulse upload and connections](docs/ui-settings.png)
+
+*Every setting is editable at runtime, including the camera rotation in 90°
+steps. Secrets are stored on the board and never sent back to the page.*
+
+![Training frames: paged thumbnail gallery with upload, purge, ZIP download and deletion of single frames](docs/ui-training-frames.png)
+
+*The training buffer. Browse what the watchdog collected, upload it to Edge
+Impulse in the background, pull single frames as a ZIP or delete them — a print
+that only fails near the end still yields both its anomalies and its normal
+data.*
+
 ## Getting started
 
 The order matters, and it is the opposite of what you might expect.
