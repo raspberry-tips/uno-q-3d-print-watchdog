@@ -56,6 +56,13 @@
 > Stop are not persisted: an app restart goes back to automatic, so a forgotten
 > Stop cannot silently starve the next re-training.
 >
+> **Model view.** The live frame is not just the camera: every grid cell is
+> tinted by its anomaly score — green below the threshold, brighter the higher
+> the score, red once it crosses it. You watch where the model looks, every
+> cycle, and the alarm image on the right freezes the moment the red cells
+> tipped the alarm. *Settings → model view on live frame* switches back to the
+> plain camera image.
+>
 > **Resetting an alarm.** An alarm latches until the print ends, and until
 > then the watchdog would not alarm again — a false alarm in minute four would
 > hide a real failure in hour six. Under the alarm image, *Reset alarm* clears
@@ -109,6 +116,10 @@ spaghetti-waechter/
 - **AUTO_PAUSE = False** bis die Schwelle auf echten Drucken validiert ist;
   Pause = sauberes Parken, nie M112
 - Alarm latcht bis Druckende; Alarm-Frames (roh + markiert) landen in `data/alarme/`
+- **Modell-Ansicht im Livebild**: jede Rasterzelle wird nach ihrem Score getönt —
+  grün unter der Schwelle (heller, je höher der Score), rot darüber. So sieht man in
+  jedem Zyklus, wo das Modell hinschaut; das Alarm-Bild rechts friert den Moment
+  ein, in dem die roten Zellen den Alarm ausgelöst haben. Abschaltbar in den Settings.
 - **Alarm zurücksetzen** unter dem Alarm-Bild oder per Home-Assistant-Button:
   „Reset alarm" löscht den Alarm (HA + LED-Matrix) und schaltet wieder scharf —
   ein Fehlalarm in Minute 4 macht den Wächter sonst bis Druckende blind.
