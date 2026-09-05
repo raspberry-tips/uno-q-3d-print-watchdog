@@ -21,6 +21,14 @@
 > | `assets/index.html` | status page on port 7000: live frame, recording start/stop, last alarm with markers, log, all settings |
 > | `sketch/sketch.ino` | LED-matrix alarm and heartbeat, `Bridge.provide("set_alarm")` |
 >
+> **The status page** on port 7000, as it runs on my board:
+>
+> ![Status page: live camera view with the recording buttons, the last alarm with the flagged cells drawn on](https://raw.githubusercontent.com/raspberry-tips/uno-q-3d-print-watchdog/main/docs/ui-status.png)
+>
+> ![Settings: camera rotation, detection, behaviour, Edge Impulse upload and connections — every value editable at runtime](https://raw.githubusercontent.com/raspberry-tips/uno-q-3d-print-watchdog/main/docs/ui-settings.png)
+>
+> ![Training frames: paged thumbnail gallery, upload to Edge Impulse, purge, ZIP download and deletion of single frames](https://raw.githubusercontent.com/raspberry-tips/uno-q-3d-print-watchdog/main/docs/ui-training-frames.png)
+>
 > **Install:** download `spaghetti-waechter.zip`, then *Import App* in App Lab (or
 > `arduino-app-cli app import spaghetti-waechter.zip`).
 >
