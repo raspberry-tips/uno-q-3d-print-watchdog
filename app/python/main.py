@@ -40,7 +40,7 @@ log = Logger("SpaghettiWaechter")
 STATE = {"status": "starting", "score": 0.0, "printer": "", "alarm": False,
          "muted": False,
          "frame_b64": "", "alarm_b64": "", "threshold": config.SCORE_THRESHOLD,
-         "record_mode": "auto", "recording": False,
+         "record_mode": "auto", "recording": False, "cells": None,
          "rotation": config.CAMERA_ROTATION}
 WEBLOG = deque(maxlen=60)
 
@@ -76,6 +76,7 @@ TUNABLES = {  # name -> (type, min, max)
     "TRAINING_FRAME_MAX": (int, 50, 20000),
     "CAMERA_ROTATION": (int, 0, 270),
     "MARKER_OPACITY": (int, 10, 100),
+    "LIVE_OVERLAY": (bool, None, None),
     "MOONRAKER_HOST": (str, None, None),
     "MQTT_HOST": (str, None, None),
     "MQTT_PORT": (int, 1, 65535),
@@ -363,43 +364,86 @@ def collect_training_frame(img):
         log.warning(f"Training buffer: {e}")
 
 # -- Actions --------------------------------------------------
-def annotate(frame, detection):
-    """Draw the anomaly regions so the user can see WHAT the model reacted to.
+def annotate(frame, detection, live=False):
+    """Draw the grid cells so the user can see WHERE the model looks and WHAT
+    it reacted to.
 
     Not the App Lab helper (draw_anomaly_markers): it paints every grid cell
     the runner returns - close to 400 of them - in red scaled to the top
     score, with a black frame each, so the alarm image turns into a solid red
-    wall and hides exactly what the user wants to look at. Here only cells at
-    or above the alarm threshold are tinted, with a capped opacity
-    (MARKER_OPACITY, editable in the browser) and a thin light outline."""
+    wall and hides exactly what the user wants to look at.
+
+    Alarm image (live=False): only cells at or above the threshold, red, with
+    a capped opacity (MARKER_OPACITY) and a thin light outline.
+    Model view (live=True): additionally every cell below the threshold in
+    green, scaled to the score range of THIS frame (darkest cell = no tint,
+    highest = full green, saturating at the threshold once a cell is red).
+    Relative on purpose: in observer mode (threshold 100) an absolute scale
+    would leave everything pale - the frozen alarm image then shows red where
+    the live view had been turning bright green."""
     cells = detection.get("detection", []) if detection else []
-    scored = []
+    thr = config.SCORE_THRESHOLD
+    red, green = [], []
     for c in cells:
         box = c.get("bounding_box_xyxy")
         try:
             score = float(c.get("score", 0.0))
         except (TypeError, ValueError):
             continue
-        if box and len(box) == 4 and score >= config.SCORE_THRESHOLD:
-            scored.append((score, [int(v) for v in box]))
-    if not scored:
+        if not box or len(box) != 4:
+            continue
+        (red if score >= thr else green).append((score, [int(v) for v in box]))
+    if not red and not (live and green):
         return frame
     try:
         base = frame.convert("RGBA")
         layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(layer)
-        top = max(s for s, _ in scored)
-        span = max(top - config.SCORE_THRESHOLD, 1e-6)
         peak = 255 * config.MARKER_OPACITY / 100.0
-        for score, box in scored:
-            t = (score - config.SCORE_THRESHOLD) / span      # 0 at threshold, 1 at top
-            alpha = int(peak * (0.5 + 0.5 * t))               # half .. full opacity
-            draw.rectangle(box, fill=(255, 0, 0, alpha),
-                           outline=(255, 255, 255, 150), width=1)
+        if live and green:
+            # Percentile stretch: real frames have a few hot cells and a
+            # mass of quiet ones; min/max scaling left the mass invisible.
+            ordered = sorted(s for s, _ in green)
+            lo = ordered[int(0.10 * (len(ordered) - 1))]
+            hi = thr if red else ordered[int(0.95 * (len(ordered) - 1))]
+            span = max(hi - lo, 1e-6)
+            for score, box in green:
+                t = min(max((score - lo) / span, 0.0), 1.0)
+                alpha = int(peak * t)
+                if alpha > 3:
+                    draw.rectangle(box, fill=(40, 230, 80, alpha))
+        if red:
+            top = max(s for s, _ in red)
+            span = max(top - thr, 1e-6)
+            for score, box in red:
+                t = (score - thr) / span                      # 0 at threshold, 1 at top
+                alpha = int(peak * (0.5 + 0.5 * t))           # half .. full opacity
+                draw.rectangle(box, fill=(255, 0, 0, alpha),
+                               outline=(255, 255, 255, 150), width=1)
         return Image.alpha_composite(base, layer).convert("RGB")
     except Exception as e:
         log.warning(f"Marker image failed ({e}) - using raw frame.")
         return frame
+
+
+def publish_live(frame, result):
+    """Live frame for the status page: the model view if enabled, else raw.
+    Also the cell score distribution - min / median / max over the grid - so
+    the page shows how far the mass of the frame sits below the top score."""
+    if config.LIVE_OVERLAY and result:
+        STATE["frame_b64"] = _b64(annotate(frame, result, live=True))
+    STATE["overlay"] = bool(config.LIVE_OVERLAY and result)
+    scores = []
+    for c in (result.get("detection", []) if result else []):
+        try:
+            scores.append(float(c.get("score", 0.0)))
+        except (TypeError, ValueError):
+            pass
+    if scores:
+        scores.sort()
+        STATE["cells"] = {"n": len(scores), "min": round(scores[0], 1),
+                          "p50": round(scores[len(scores) // 2], 1),
+                          "max": round(scores[-1], 1)}
 
 def set_alarm(on: bool, score: float = 0.0, frame=None, detection=None):
     global alarm_latched
@@ -504,6 +548,7 @@ def loop():
     frame = grab_frame()
     if frame is not None:
         STATE["frame_b64"] = _b64(frame)
+    STATE["overlay"] = False                   # set again below once scored
 
     # Recording by hand: every frame, printing or not, no threshold filter -
     # whoever pressed "start" wants exactly this scene in the buffer.
@@ -529,6 +574,7 @@ def loop():
             score = float(result.get("anomaly_max_score", 0.0)) if result else 0.0
             STATE["score"] = score
             ha.publish_score(score)
+            publish_live(frame, result)
             note(f"Score {score:.1f} (warm-up - not counted for alarm)")
         return
     set_status("watching")
@@ -546,6 +592,7 @@ def loop():
     score = float(result.get("anomaly_max_score", 0.0)) if result else 0.0
     STATE["score"] = score
     ha.publish_score(score)
+    publish_live(frame, result)
 
     hits.append(score >= config.SCORE_THRESHOLD)
     regions = len(result.get("detection", [])) if result else 0
