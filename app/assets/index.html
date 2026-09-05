@@ -20,8 +20,9 @@
   section { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
   section h2 { font-size: .95em; margin: 0 0 8px; color: #2d5016; }
   img { width: 100%; border-radius: 4px; background: #ddd; min-height: 120px; }
-  pre { grid-column: 1 / -1; background: #1e1e1e; color: #9fdf9f; padding: 12px; border-radius: 8px;
-        font-size: .8em; max-height: 320px; overflow-y: auto; margin: 0 14px 14px; white-space: pre-wrap; }
+  pre { background: #1e1e1e; color: #9fdf9f; padding: 12px; border-radius: 8px;
+        font-size: .8em; max-height: 320px; overflow-y: auto; margin: 0; white-space: pre-wrap; }
+  #loglast { font-weight: normal; color: #666; font-size: .85em; margin-left: 8px; }
   .score { font-size: 1.5em; font-weight: 700; }
   details { max-width: 1400px; margin: 0 auto 14px; padding: 0 14px; }
   details > div { background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
@@ -193,7 +194,10 @@
   </div>
 </details>
 <div id="lightbox"><img id="lbimg" alt="training frame"><span id="lbname"></span><a id="lbdl" download>Download this frame</a></div>
-<pre id="log">Waiting for data …</pre>
+<details id="logdetails">
+  <summary>📜 Log <span id="loglast"></span></summary>
+  <div><pre id="log">Waiting for data …</pre></div>
+</details>
 <script>
 async function refresh() {
   try {
@@ -206,6 +210,8 @@ async function refresh() {
     document.getElementById("thresh").textContent = s.threshold;
     document.getElementById("printer").textContent = s.printer ? "Printer: " + s.printer : "";
     document.getElementById("log").textContent = s.log.join("\n") || "(no events yet)";
+    // Collapsed by default - the summary still shows the latest line.
+    document.getElementById("loglast").textContent = s.log.length ? "· " + s.log[s.log.length - 1] : "";
     paintRecording(s.record_mode, s.recording);
     if (s.frame_b64) document.getElementById("frame").src = "data:image/jpeg;base64," + s.frame_b64;
     document.getElementById("overlaynote").style.display = s.overlay ? "" : "none";
