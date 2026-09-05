@@ -120,6 +120,8 @@
       <label class="check"><input type="checkbox" name="COLLECT_TRAINING_FRAMES"> collect training frames<span class="info" title="Keep a rolling buffer of inconspicuous frames in data/training/ — ready to upload to Edge Impulse for re-training, e.g. after lighting or camera changes. Browse, upload and purge it under 'Training frames' below.">i</span></label>
       <label>Buffer size<span class="info" title="Maximum number of frames kept in data/training/. Once it is full the oldest frame is deleted for every new one — roughly 100 kB per frame.">i</span>
         <input type="number" name="TRAINING_FRAME_MAX"></label>
+      <label>Marker opacity (%)<span class="info" title="How strongly the flagged cells are tinted red in the alarm image. Only cells at or above the threshold are marked; the strongest one gets this opacity, weaker ones fade towards half of it. Lower it if you want to see more of the print underneath.">i</span>
+        <input type="number" name="MARKER_OPACITY" min="10" max="100"></label>
     </fieldset>
     <fieldset><legend>Edge Impulse upload</legend>
       <label>API key<span class="info" title="Edge Impulse Studio → Dashboard → Keys. Stored in data/settings.json on the board and never sent back to this page. Leave empty to keep the stored key. Note: the default key may upload and deploy but cannot start a training run — that needs an admin key.">i</span>
