@@ -56,6 +56,15 @@
 > Stop are not persisted: an app restart goes back to automatic, so a forgotten
 > Stop cannot silently starve the next re-training.
 >
+> **Resetting an alarm.** An alarm latches until the print ends, and until
+> then the watchdog would not alarm again — a false alarm in minute four would
+> hide a real failure in hour six. Under the alarm image, *Reset alarm* clears
+> it in Home Assistant and on the LED matrix and arms the watchdog again (if
+> the scene still scores high it fires again after a few checks); *False
+> alarm* clears it and stays quiet until Moonraker reports the end of the
+> print. Both exist as **buttons in Home Assistant** as well, so you can
+> acknowledge from the phone the notification arrived on.
+>
 > **Camera rotation.** *Settings → Camera* rotates the image in 90° steps
 > (default 180°, the camera hangs upside down over the bed). The GStreamer
 > pipeline restarts within one cycle. The rotation is part of the image
@@ -100,6 +109,10 @@ spaghetti-waechter/
 - **AUTO_PAUSE = False** bis die Schwelle auf echten Drucken validiert ist;
   Pause = sauberes Parken, nie M112
 - Alarm latcht bis Druckende; Alarm-Frames (roh + markiert) landen in `data/alarme/`
+- **Alarm zurücksetzen** unter dem Alarm-Bild oder per Home-Assistant-Button:
+  „Reset alarm" löscht den Alarm (HA + LED-Matrix) und schaltet wieder scharf —
+  ein Fehlalarm in Minute 4 macht den Wächter sonst bis Druckende blind.
+  „False alarm" löscht ihn ebenfalls und bleibt bis Druckende stumm.
 
 ## Sofort startklar
 
