@@ -1,0 +1,42 @@
+# automation_spaghetti.yaml - the Home Assistant side of the Spaghetti Watchdog.
+# The entities are created by the app itself through MQTT discovery (device
+# "Spaghetti Watchdog (UNO Q)"); only the automations live here.
+# In Home Assistant: Settings -> Automations -> new -> paste as YAML, one at a time.
+#
+# Entity ids below are the ones discovery creates on my installation. If yours
+# differ (Home Assistant derives them from the entity names), look them up under
+# Settings -> Devices -> Spaghetti Watchdog. The device also carries two buttons,
+# "Alarm zurücksetzen" (reset, armed again) and "Fehlalarm bis Druckende" (mute
+# until the print ends) - press them from the device page or wire them into an
+# actionable notification.
+
+- alias: "3D print: spaghetti alarm to the phone"
+  id: spaghetti_alarm_notify
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.spaghetti_alarm
+      to: "on"
+  actions:
+    - action: notify.notify   # or notify.mobile_app_<device>
+      data:
+        title: "🍝 Spaghetti alarm!"
+        message: >
+          The UNO Q reports a print that has probably failed
+          (score {{ states('sensor.anomalie_score') }}).
+          Check the printer!
+        data:
+          push:
+            interruption-level: time-sensitive
+
+- alias: "3D print: watchdog offline during a print"
+  id: spaghetti_watchdog_offline
+  triggers:
+    - trigger: state
+      entity_id: sensor.waechter_status
+      to: "unavailable"
+      for: "00:03:00"
+  actions:
+    - action: notify.notify
+      data:
+        title: "⚠️ Spaghetti Watchdog offline"
+        message: "The watchdog has stopped reporting - the print is running unwatched."
