@@ -56,6 +56,12 @@
 > Stop are not persisted: an app restart goes back to automatic, so a forgotten
 > Stop cannot silently starve the next re-training.
 >
+> **Which model is scoring.** The header names the model from `app.yaml`,
+> with the file and registry paths in its tooltip - useful once you have more
+> than one trained generation. The built-in placeholder is flagged in orange.
+> Switching models means editing `app.yaml` and restarting the app; there is
+> no runtime switch, the model runs in its own container started by App Lab.
+>
 > **Model view.** The live frame is not just the camera: every grid cell is
 > tinted by its anomaly score — green below the threshold, brighter the higher
 > the score, red once it crosses it. You watch where the model looks, every
@@ -116,6 +122,9 @@ spaghetti-waechter/
 - **AUTO_PAUSE = False** bis die Schwelle auf echten Drucken validiert ist;
   Pause = sauberes Parken, nie M112
 - Alarm latcht bis Druckende; Alarm-Frames (roh + markiert) landen in `data/alarme/`
+- **Welches Modell scort**: Der Header zeigt den Modellnamen aus `app.yaml` (Tooltip:
+  Pfad der `.eim` und der Registrierung); der eingebaute Platzhalter wird orange
+  markiert. Wechsel = `app.yaml` ändern + App neu starten, zur Laufzeit geht es nicht.
 - **Modell-Ansicht im Livebild**: jede Rasterzelle wird nach ihrem Score getönt —
   grün unter der Schwelle (heller, je höher der Score), rot darüber. So sieht man in
   jedem Zyklus, wo das Modell hinschaut; das Alarm-Bild rechts friert den Moment
