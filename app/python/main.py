@@ -480,8 +480,11 @@ def loop():
             note(f"Score {score:.1f} (warm-up - not counted for alarm)")
         return
     set_status("watching")
-    if alarm_latched:
-        return                                 # latched: nothing left to do
+    # A latched alarm used to end the cycle here. It no longer does: the
+    # score keeps flowing to the page, the log and Home Assistant, and the
+    # automatic recording keeps collecting frames below the threshold - a
+    # false alarm must not switch the buffer off for the rest of the print.
+    # set_alarm() ignores repeated hits while latched, so nothing fires twice.
 
     if frame is None:
         note("No camera frame received.", warn=True)
@@ -494,7 +497,8 @@ def loop():
 
     hits.append(score >= config.SCORE_THRESHOLD)
     regions = len(result.get("detection", [])) if result else 0
-    note(f"Score {score:.1f} | regions {regions} | window {list(hits)}")
+    note(f"Score {score:.1f} | regions {regions} | window {list(hits)}"
+         + (" | alarm latched" if alarm_latched else ""))
 
     if mode == "auto" and config.COLLECT_TRAINING_FRAMES:
         STATE["recording"] = True
