@@ -77,10 +77,11 @@
   <span class="pill rec" id="rec" style="display:none" title="frames are being written to the training buffer">REC</span>
   <span class="pill muted" id="mutedpill" style="display:none" title="no new alarms until the print ends">muted</span>
   <span>Score: <span class="score" id="score">–</span> / threshold <span id="thresh">–</span></span>
+  <span id="cells" class="muted" style="color:#dfe9d2;margin:0" title="anomaly score per grid cell: lowest / median / highest"></span>
   <span id="printer"></span>
 </header>
 <main>
-  <section><h2>Current camera view</h2><img id="frame" alt="current camera view">
+  <section><h2>Current camera view <span class="muted" id="overlaynote" style="display:none;font-weight:normal">· model view: green = below threshold (brighter = higher score), red = above</span></h2><img id="frame" alt="current camera view">
     <div class="row rec-row">
       <button type="button" id="recon">Start recording</button>
       <button type="button" id="recoff" class="danger">Stop recording</button>
@@ -130,8 +131,9 @@
       <label class="check"><input type="checkbox" name="COLLECT_TRAINING_FRAMES"> collect training frames<span class="info" title="Keep a rolling buffer of inconspicuous frames in data/training/ — ready to upload to Edge Impulse for re-training, e.g. after lighting or camera changes. Browse, upload and purge it under 'Training frames' below.">i</span></label>
       <label>Buffer size<span class="info" title="Maximum number of frames kept in data/training/. Once it is full the oldest frame is deleted for every new one — roughly 100 kB per frame.">i</span>
         <input type="number" name="TRAINING_FRAME_MAX"></label>
-      <label>Marker opacity (%)<span class="info" title="How strongly the flagged cells are tinted red in the alarm image. Only cells at or above the threshold are marked; the strongest one gets this opacity, weaker ones fade towards half of it. Lower it if you want to see more of the print underneath.">i</span>
+      <label>Marker opacity (%)<span class="info" title="How strongly the flagged cells are tinted in the alarm image and the model view. Only cells at or above the threshold are red; the strongest one gets this opacity, weaker ones fade towards half of it. Lower it if you want to see more of the print underneath.">i</span>
         <input type="number" name="MARKER_OPACITY" min="10" max="100"></label>
+      <label class="check"><input type="checkbox" name="LIVE_OVERLAY"> model view on live frame<span class="info" title="Tint every grid cell of the live frame by its anomaly score: green below the threshold (brighter = higher score, scaled per frame), red once it crosses it. Shows where the model actually looks, every cycle; the alarm image on the right then freezes the moment the red cells tipped the alarm. Off shows the plain camera image.">i</span></label>
     </fieldset>
     <fieldset><legend>Edge Impulse upload</legend>
       <label>API key<span class="info" title="Edge Impulse Studio → Dashboard → Keys. Stored in data/settings.json on the board and never sent back to this page. Leave empty to keep the stored key. Note: the default key may upload and deploy but cannot start a training run — that needs an admin key.">i</span>
@@ -206,6 +208,9 @@ async function refresh() {
     document.getElementById("log").textContent = s.log.join("\n") || "(no events yet)";
     paintRecording(s.record_mode, s.recording);
     if (s.frame_b64) document.getElementById("frame").src = "data:image/jpeg;base64," + s.frame_b64;
+    document.getElementById("overlaynote").style.display = s.overlay ? "" : "none";
+    document.getElementById("cells").textContent = s.cells
+      ? `cells ${s.cells.n}: min ${s.cells.min} · median ${s.cells.p50} · max ${s.cells.max}` : "";
     if (s.alarm_b64) {
       const ai = document.getElementById("alarmimg");
       ai.src = "data:image/jpeg;base64," + s.alarm_b64;
