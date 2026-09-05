@@ -20,7 +20,7 @@ import time
 from collections import deque
 from datetime import datetime
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from arduino.app_utils import App, Bridge, Logger
 from arduino.app_bricks.visual_anomaly_detection import VisualAnomalyDetection
@@ -72,6 +72,7 @@ TUNABLES = {  # name -> (type, min, max)
     "COLLECT_TRAINING_FRAMES": (bool, None, None),
     "TRAINING_FRAME_MAX": (int, 50, 20000),
     "CAMERA_ROTATION": (int, 0, 270),
+    "MARKER_OPACITY": (int, 10, 100),
     "MOONRAKER_HOST": (str, None, None),
     "MQTT_HOST": (str, None, None),
     "MQTT_PORT": (int, 1, 65535),
@@ -359,15 +360,41 @@ def collect_training_frame(img):
 # -- Actions --------------------------------------------------
 def annotate(frame, detection):
     """Draw the anomaly regions so the user can see WHAT the model reacted to.
-    draw_anomaly_markers comes from the App Lab example 01_visual_anomaly."""
+
+    Not the App Lab helper (draw_anomaly_markers): it paints every grid cell
+    the runner returns - close to 400 of them - in red scaled to the top
+    score, with a black frame each, so the alarm image turns into a solid red
+    wall and hides exactly what the user wants to look at. Here only cells at
+    or above the alarm threshold are tinted, with a capped opacity
+    (MARKER_OPACITY, editable in the browser) and a thin light outline."""
+    cells = detection.get("detection", []) if detection else []
+    scored = []
+    for c in cells:
+        box = c.get("bounding_box_xyxy")
+        try:
+            score = float(c.get("score", 0.0))
+        except (TypeError, ValueError):
+            continue
+        if box and len(box) == 4 and score >= config.SCORE_THRESHOLD:
+            scored.append((score, [int(v) for v in box]))
+    if not scored:
+        return frame
     try:
-        from arduino.app_utils.image import draw_anomaly_markers
-        marked = draw_anomaly_markers(image=frame, detection=detection)
-        if marked is not None:
-            return marked
+        base = frame.convert("RGBA")
+        layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        top = max(s for s, _ in scored)
+        span = max(top - config.SCORE_THRESHOLD, 1e-6)
+        peak = 255 * config.MARKER_OPACITY / 100.0
+        for score, box in scored:
+            t = (score - config.SCORE_THRESHOLD) / span      # 0 at threshold, 1 at top
+            alpha = int(peak * (0.5 + 0.5 * t))               # half .. full opacity
+            draw.rectangle(box, fill=(255, 0, 0, alpha),
+                           outline=(255, 255, 255, 150), width=1)
+        return Image.alpha_composite(base, layer).convert("RGB")
     except Exception as e:
         log.warning(f"Marker image failed ({e}) - using raw frame.")
-    return frame
+        return frame
 
 def set_alarm(on: bool, score: float = 0.0, frame=None, detection=None):
     global alarm_latched
