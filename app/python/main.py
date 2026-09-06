@@ -39,7 +39,7 @@ log = Logger("SpaghettiWaechter")
 # -- Status web page (web_ui brick, port 7000) ----------------
 # Deliberately simple: the page polls GET /state every 5 s, no WebSocket.
 STATE = {"status": "starting", "score": 0.0, "printer": "", "alarm": False,
-         "muted": False,
+         "muted": False, "alarm_since": "",
          "frame_b64": "", "alarm_b64": "", "threshold": config.SCORE_THRESHOLD,
          "record_mode": "auto", "recording": False, "cells": None,
          "rotation": config.CAMERA_ROTATION}
@@ -488,6 +488,7 @@ def set_alarm(on: bool, score: float = 0.0, frame=None, detection=None):
         regions = len(detection.get("detection", [])) if detection else 0
         note(f"SPAGHETTI ALARM! Score {score:.1f} ({regions} suspicious regions)", warn=True)
         STATE["alarm"] = True
+        STATE["alarm_since"] = f"{datetime.now():%H:%M:%S}"
         ha.publish_alarm(True)
         try:
             Bridge.call("set_alarm", True)     # LED matrix on the STM32
