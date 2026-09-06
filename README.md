@@ -171,13 +171,19 @@ them in order. The long version with the reasoning behind each step is in the
   *Stop*, tick those frames in the gallery, *Download selection (ZIP)*, delete
   them from the buffer, and upload the ZIP in the Studio under *Data
   acquisition → Testing* with the label `anomaly`. Ten to twenty are plenty.
+  Check that they really sit in *Testing* — anomalies uploaded through the
+  app land in *Training*, and FOMO-AD must never train on a failure.
 
 **7. Train**
 
-- Studio → *Impulse design*: image 160 × 160, resize mode **squash**; learning
+- Studio → *Impulse design*: image 160 × 160 (or 224 × 224 for finer cells — it
+  costs inference time, which you have), resize mode **squash**; learning
   block **Visual Anomaly Detection (FOMO-AD)** — it hides behind *Show all
   blocks*, and the block just called "Anomaly Detection" is the wrong one
-  (1-D sensor autoencoder).
+  (1-D sensor autoencoder). In the block keep PatchCore + EfficientNetV2-B0;
+  with thousands of normal frames raise the memory (Capacity, or the sampling
+  ratio in expert mode) a notch — the smallest setting forgets the rare scenes
+  first — and watch the `.eim` size.
 - *Dashboard → Danger zone → Perform train/test split*, then check that your
   `anomaly` samples are still in the test set.
 - *Generate features*, then *Train*. Expect half an hour.
