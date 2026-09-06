@@ -75,7 +75,9 @@
 > it in Home Assistant and on the LED matrix and arms the watchdog again (if
 > the scene still scores high it fires again after a few checks); *False
 > alarm* clears it and stays quiet until Moonraker reports the end of the
-> print. Both exist as **buttons in Home Assistant** as well, so you can
+> print — and it works ahead of an alarm too, e.g. before a filament change.
+> A status line under the buttons says whether an alarm is active and since
+> when. Both exist as **buttons in Home Assistant** as well, so you can
 > acknowledge from the phone the notification arrived on.
 >
 > **Camera rotation.** *Settings → Camera* rotates the image in 90° steps
