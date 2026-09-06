@@ -58,6 +58,14 @@ Inference is **67 ms per frame** (float32; int8 measured *slower* at 119 ms,
 there is no integer accelerator here to reward quantisation). The compute was
 never the constraint in this project — the image was.
 
+Why Edge Impulse, if PatchCore itself is just a pretrained backbone plus a
+memory of normal patches? Because of the last step: the Studio compiles backbone
+and memory bank into the `.eim` binary that App Lab's visual-anomaly brick
+loads. That binary is what makes the model a one-line entry in `app.yaml` and
+what runs at 67 ms here. Train elsewhere and you also have to ship your own
+inference (backbone as ONNX, memory bank as an array, nearest neighbours in
+NumPy) — a fine project, just not this one.
+
 ## The status page
 
 The app serves a small web page on port 7000 — no login, so keep it on your own
