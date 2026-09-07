@@ -7,6 +7,7 @@
 # authentication, because trusted_clients covers the local subnet.
 
 import json
+import time
 import urllib.request
 import urllib.error
 
@@ -50,9 +51,21 @@ class Moonraker:
         except (KeyError, TypeError):
             return 0.0
 
-    def pause(self) -> bool:
-        """Clean pause - the head parks. Deliberately NOT an e-stop (M112)."""
-        return self._post("/printer/print/pause")
+    def pause(self, wait: float = 30.0) -> bool:
+        """Ask Moonraker to pause. The request blocks until the PAUSE macro has
+        parked the head, which takes longer than the 4 s default timeout - so
+        the call used to report FAILED while the printer had in fact paused.
+        Now: long timeout, and on any error fall back to asking print_stats."""
+        old = self.timeout
+        self.timeout = wait
+        try:
+            ok = self._post("/printer/print/pause")
+        finally:
+            self.timeout = old
+        if ok:
+            return True
+        time.sleep(2.0)
+        return self.print_state() == "paused"
 
     def reachable(self) -> bool:
         return self._get("/printer/info") is not None
