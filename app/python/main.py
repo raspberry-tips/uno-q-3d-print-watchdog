@@ -568,7 +568,12 @@ def loop():
     printer_state = printer.print_state()
     STATE["printer"] = printer_state
     printing = printer_state == "printing"
-    if last_printing and not printing:
+    paused = printer_state == "paused"
+    # A paused print is still a print: the auto-pause itself (or a pause by
+    # hand) must not clear the alarm - that happened within ten seconds in the
+    # first live demo. The latch releases when the print really ends.
+    in_print = printing or paused
+    if last_printing and not in_print:
         # End of print: release the latch and lift a mute, independent of
         # ONLY_WHILE_PRINTING (with that switched off the idle branch below
         # never runs, and an alarm used to stay latched until an app restart).
@@ -578,7 +583,7 @@ def loop():
             alarm_muted = False
             STATE["muted"] = False
             note("Print ended - alarm mute lifted.")
-    last_printing = printing
+    last_printing = in_print
 
     # Refresh the camera image on EVERY cycle for the status page (aiming,
     # spot checks) - it is only scored further down, while actually printing.
@@ -594,6 +599,10 @@ def loop():
         collect_training_frame(frame)
     STATE["recording"] = mode == "on"
 
+    if paused:
+        set_status("paused")                   # head parked: nothing to score, alarm stays
+        hits.clear()
+        return
     if config.ONLY_WHILE_PRINTING and not printing:
         set_status("idle")
         hits.clear()
